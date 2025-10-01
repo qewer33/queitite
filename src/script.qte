@@ -1,0 +1,12 @@
+sq(n) = n*n
+
+main() = do
+    a = sq(10)
+
+    # this is a comment
+    if a == 100 do
+        print(a)
+    end
+end
+
+main()
