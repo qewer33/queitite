@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use crate::token::Token;
+use crate::token::{Token, KEYWORDS};
 
 pub struct Lexer {
     src: Vec<char>,
@@ -78,6 +78,7 @@ impl Lexer {
 
                 Some(Token::Mult)
             },
+
             '/' => {
                 Some(Token::Div)
             },
@@ -104,10 +105,19 @@ impl Lexer {
                 Some(Token::Not)
             },
             // other
+            '\n' => {
+                Some(Token::EOL)
+            },
+            '(' => {
+                Some(Token::LParen)
+            },
+            ')' => {
+                Some(Token::RParen)
+            },
             '#' => {
                 let comment = self.consume_until('\n');
                 Some(Token::Comment(comment))
-            }
+            },
             ' ' => None,
             _ => {
                 // check types
@@ -119,9 +129,22 @@ impl Lexer {
                     return Some(Token::Num(num));
                 }
 
-                // assume keyword
-                let keyword = self.consume_until(' ');
-                Some(Token::Keyword(keyword))
+                // checks keywords, assume identifiers if it doesn't match any
+                let mut str = String::new();
+                
+                loop {
+                    str.push(self.current());
+
+                    if !self.peek().is_alphanumeric() {
+                        break;
+                    }
+                    self.next();
+                }
+
+                if KEYWORDS.contains(&str.as_str()) {
+                    return Some(Token::Keyword(str));
+                }
+                Some(Token::Identifier(str))
             }
         };
 
@@ -141,7 +164,17 @@ impl Lexer {
 
     fn check_num(&mut self) -> Option<String> {
         if self.current().is_numeric() {
-            let num = self.consume_until(' ');
+            let mut num = String::new();
+
+            loop {
+                num.push(self.current());
+
+                if !self.peek().is_numeric() {
+                    break;
+                }
+                self.next();
+            }
+
             return Some(num);
         }
         None

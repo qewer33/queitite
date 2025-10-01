@@ -26,5 +26,22 @@ pub enum Token {
     LesserEquals,
     // other
     Keyword(String),
+    Identifier(String),
     Comment(String),
+    LParen,
+    RParen,
+    LBracket,
+    RBracket,
+    EOL
 }
+
+pub const KEYWORDS: &[&str] = &[
+    "do",
+    "end",
+    "if",
+    "for",
+    "while",
+    "return",
+    "yeet",
+    "throw"
+];
