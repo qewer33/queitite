@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     // types
     Num(String),
@@ -27,12 +27,13 @@ pub enum Token {
     // other
     Keyword(String),
     Identifier(String),
-    Comment(String),
     LParen,
     RParen,
     LBracket,
     RBracket,
-    EOL
+    Comma,
+    EOL,
+    EOF
 }
 
 pub const KEYWORDS: &[&str] = &[
@@ -43,5 +44,6 @@ pub const KEYWORDS: &[&str] = &[
     "while",
     "return",
     "yeet",
-    "throw"
+    "throw",
+    "amogus"
 ];

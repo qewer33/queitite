@@ -2,11 +2,15 @@ sq(n) = n*n
 
 main() = do
     a = sq(10)
+    b = true;
 
     # this is a comment
+
     if a == 100 do
-        print(a)
+        print("poggers")
     end
+
+    print(a)
 end
 
 main()
