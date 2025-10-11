@@ -1,8 +1,10 @@
 pub mod cursor;
 pub mod token;
 
+use std::str::FromStr;
+
 use crate::lexer::cursor::Cursor;
-use crate::lexer::token::{KEYWORDS, Token, TokenKind};
+use crate::lexer::token::{KeywordKind, Token, TokenKind};
 
 pub struct Lexer {
     /// The source code as a Vec<char>
@@ -213,8 +215,8 @@ impl Lexer {
                 }
 
                 self.next();
-                if KEYWORDS.contains(&str.as_str()) {
-                    return Some(TokenKind::Keyword(str));
+                if let Ok(kind) = KeywordKind::from_str(str.as_str()) {
+                    return Some(TokenKind::Keyword(kind));
                 }
                 Some(TokenKind::Identifier(str))
             }
@@ -414,13 +416,13 @@ mod tests {
         assert_eq!(
             tokens("if a == 100 do\nend\n"),
             vec![
-                TokenKind::Keyword("if".into()),
+                TokenKind::Keyword(KeywordKind::If),
                 TokenKind::Identifier("a".into()),
                 TokenKind::Equals,
                 TokenKind::Num("100".into()),
-                TokenKind::Keyword("do".into()),
+                TokenKind::Keyword(KeywordKind::Do),
                 TokenKind::EOL,
-                TokenKind::Keyword("end".into()),
+                TokenKind::Keyword(KeywordKind::End),
                 TokenKind::EOL,
                 TokenKind::EOF
             ]
@@ -505,9 +507,9 @@ mod tests {
         assert_eq!(
             tokens("do end if print dox\n"),
             vec![
-                TokenKind::Keyword("do".into()),
-                TokenKind::Keyword("end".into()),
-                TokenKind::Keyword("if".into()),
+                TokenKind::Keyword(KeywordKind::Do),
+                TokenKind::Keyword(KeywordKind::End),
+                TokenKind::Keyword(KeywordKind::If),
                 TokenKind::Identifier("print".into()),
                 TokenKind::Identifier("dox".into()),
                 TokenKind::EOL,

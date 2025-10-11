@@ -36,32 +36,80 @@ pub enum TokenKind {
     Comma,
     Dot,
     // other
-    Keyword(String),
+    Keyword(KeywordKind),
     Identifier(String),
     NULL,
     EOL,
     EOF,
 }
 
-#[rustfmt::skip]
-pub const KEYWORDS: &[&str] = &[
-    "do",
-    "end",
-    "if",
-    "for",
-    "while",
-    "return",
-    "use",
-    "self",
-    // reserved for later
-    "fn",
-    "obj",
-    "new",
-    "throw",
-    "self",
-    "yeet",
-    "amogus"
-];
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum KeywordKind {
+    // core
+    Do,
+    End,
+    If,
+    For,
+    While,
+    Return,
+    Use,
+    KSelf,
+    // reserved
+    Fn,
+    Obj,
+    New,
+    Err,
+    Amogus,
+}
+
+impl ToString for KeywordKind {
+    fn to_string(&self) -> String {
+        match self {
+            KeywordKind::Do => "do",
+            KeywordKind::End => "end",
+            KeywordKind::If => "if",
+            KeywordKind::For => "for",
+            KeywordKind::While => "while",
+            KeywordKind::Return => "return",
+            KeywordKind::Use => "use",
+            KeywordKind::KSelf => "self",
+
+            KeywordKind::Fn => "fn",
+            KeywordKind::Obj => "obj",
+            KeywordKind::New => "new",
+            KeywordKind::Err => "err",
+            KeywordKind::Amogus => "amogus",
+        }
+        .into()
+    }
+}
+
+impl FromStr for KeywordKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, <KeywordKind as FromStr>::Err> {
+        match s {
+            "do" => Ok(KeywordKind::Do),
+            "end" => Ok(KeywordKind::End),
+            "if" => Ok(KeywordKind::If),
+            "for" => Ok(KeywordKind::For),
+            "while" => Ok(KeywordKind::While),
+            "return" => Ok(KeywordKind::Return),
+            "use" => Ok(KeywordKind::Use),
+            "self" => Ok(KeywordKind::KSelf),
+
+            "fn" => Ok(KeywordKind::Fn),
+            "obj" => Ok(KeywordKind::Obj),
+            "new" => Ok(KeywordKind::New),
+            "err" => Ok(KeywordKind::Err),
+            "amogus" => Ok(KeywordKind::Amogus),
+
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Token {
