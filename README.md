@@ -5,17 +5,18 @@ a simple interpreted scripting language
 ```rb
 sq(n) = n*n
 
-main() = do
-    a = sq(10)
-    b = true
+main() do
+    var a = sq(10)
+    var b = true
+    b = false
 
     # this is a comment
 
     if a == 100 do
-        print("poggers")
+        print "poggers"
     end
 
-    print(a)
+    print a
 end
 
 main()
