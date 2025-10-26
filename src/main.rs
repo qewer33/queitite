@@ -1,11 +1,7 @@
 use clap::Parser as ClapParser;
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
-use crate::{
-    evaluator::Evaluator,
-    lexer::{token::*, Lexer},
-    parser::Parser, src::Src,
-};
+use crate::{evaluator::Evaluator, lexer::Lexer, parser::Parser, reporter::Reporter, src::Src};
 
 pub mod evaluator;
 pub mod lexer;
@@ -14,9 +10,14 @@ pub mod reporter;
 pub mod src;
 
 #[derive(ClapParser, Debug)]
-#[command(name = "qte", about = "QTE interpreter", version, author)]
+#[command(
+    name = "queitite",
+    about = "queitite interpreter",
+    version = "0.0.1",
+    author = "qewer33"
+)]
 struct Args {
-    /// Program file to run (e.g. script.qte)
+    /// Program file to run
     file: PathBuf,
 
     /// Dump token stream and exit
@@ -46,17 +47,20 @@ fn main() {
         println!("== TOKENS ==");
         dbg!(&src.tokens);
         if args.dump_tokens {
-            return; // only tokens requested
+            return;
         }
     }
 
     // 3) Parse
     let mut parser = Parser::new(&src);
-    let ast_opt = parser.parse();
-    src.ast = match ast_opt {
+    let parser_out = parser.parse();
+    src.ast = match parser_out.ast {
         Some(s) => Some(s),
         None => {
             // Exit on parse error
+            Reporter::error(
+                format!("parser exited with {} errors", parser_out.error_count).as_str(),
+            );
             std::process::exit(1);
         }
     };
@@ -65,7 +69,7 @@ fn main() {
         println!("== AST ==");
         dbg!(&src.ast);
         if args.dump_ast {
-            return; // only tokens requested
+            return;
         }
     }
 

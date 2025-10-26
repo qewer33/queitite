@@ -8,25 +8,69 @@ use crate::lexer::cursor::Cursor;
 
 pub type ParseResult<T> = std::result::Result<T, ParseErr>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParseErr {
     /// Error message
     pub msg: String,
     /// Error location as a Cursor
     pub cursor: Cursor,
+    /// Expected token lexeme
+    pub expected: Option<String>,
+    /// Found token lexeme
+    pub found: Option<String>,
+    /// Friendly note for the user
+    pub note: Option<String>,
 }
 
 impl ParseErr {
     pub fn new(msg: String, cursor: Cursor) -> Self {
-        Self { msg, cursor }
+        Self {
+            msg,
+            cursor,
+            expected: None,
+            found: None,
+            note: None,
+        }
     }
 
-    pub fn msg(&mut self, msg: String) {
+    pub fn with_context(
+        msg: String,
+        cursor: Cursor,
+        expected: Option<String>,
+        found: Option<String>,
+    ) -> Self {
+        Self {
+            msg,
+            cursor,
+            expected,
+            found,
+            note: None,
+        }
+    }
+
+    pub fn msg(mut self, msg: String) -> Self {
         self.msg = msg;
+        self
     }
 
-    pub fn cursor(&mut self, cursor: Cursor) {
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = cursor;
+        self
+    }
+
+    pub fn note(mut self, note: String) -> Self {
+        self.note = Some(note);
+        self
+    }
+
+    pub fn expected(mut self, expected: String) -> Self {
+        self.expected = Some(expected);
+        self
+    }
+
+    pub fn found(mut self, found: String) -> Self {
+        self.found = Some(found);
+        self
     }
 }
 

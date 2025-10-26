@@ -1,10 +1,16 @@
 pub mod env;
+pub mod function;
+pub mod natives;
 pub mod runtime_err;
 pub mod value;
+
+use std::rc::Rc;
 
 use crate::{
     evaluator::{
         env::{Env, EnvPtr},
+        function::Function,
+        natives::Natives,
         runtime_err::{EvalResult, RuntimeErr},
         value::Value,
     },
@@ -19,16 +25,22 @@ use crate::{
 pub struct Evaluator<'a> {
     pub src: &'a Src,
     ast: Vec<Stmt>,
+    globals: EnvPtr,
     env: EnvPtr,
 }
 
 impl<'a> Evaluator<'a> {
     pub fn new(src: &'a Src) -> Self {
-        Self {
+        let globals = Natives::get_natives();
+
+        let mut this = Self {
             src,
             ast: src.ast.clone().expect("expected ast"),
+            globals: globals,
             env: Env::new(),
-        }
+        };
+        this.env = this.globals.clone();
+        this
     }
 
     pub fn eval(&mut self) {
@@ -37,6 +49,7 @@ impl<'a> Evaluator<'a> {
                 Ok(_) => {}
                 Err(err) => {
                     Reporter::error_at(&err.msg, self.src, err.cursor);
+                    return;
                 }
             }
         }
@@ -46,16 +59,27 @@ impl<'a> Evaluator<'a> {
 
     fn eval_stmt(&mut self, stmt: &Stmt) -> EvalResult<()> {
         match &stmt.kind {
-            StmtKind::Expr(_) => self.eval_stmt_expr(stmt),
-            StmtKind::Print(_) => self.eval_stmt_print(stmt),
-            StmtKind::Var { name, init } => self.eval_stmt_var(stmt),
-            StmtKind::Block(statements) => self.eval_stmt_block(stmt),
+            StmtKind::Expr(_expr) => self.eval_stmt_expr(stmt),
+            StmtKind::Print(_expr) => self.eval_stmt_print(stmt),
+            StmtKind::Return(_expr) => self.eval_stmt_return(stmt),
+            StmtKind::Var { name: _, init: _ } => self.eval_stmt_var(stmt),
+            StmtKind::Block(_statements) => {
+                self.eval_stmt_block(stmt, Env::enclosed(self.env.clone()))
+            }
             StmtKind::If {
-                condition,
-                then_branch,
-                else_branch,
+                condition: _,
+                then_branch: _,
+                else_branch: _,
             } => self.eval_stmt_if(stmt),
-            StmtKind::While { condition, body } => self.eval_stmt_while(stmt),
+            StmtKind::While {
+                condition: _,
+                body: _,
+            } => self.eval_stmt_while(stmt),
+            StmtKind::Fn {
+                name: _,
+                params: _,
+                body: _,
+            } => self.eval_stmt_fn(stmt),
         }
     }
 
@@ -67,7 +91,23 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-print statement passed to Evaluator::eval_stmt_print");
+        unreachable!("Non-print statement passed to Evaluator::eval_stmt_print");
+    }
+
+    fn eval_stmt_return(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Return(expr) = &stmt.kind {
+            let mut val = Value::Null;
+            if let Some(expr) = expr {
+                val = self.eval_expr(expr)?;
+            }
+
+            // This isn't actually and error but the return value itself
+            // We're taking advantage of the ? operator here to unwind the stack
+            // and return the value back to the call function
+            return Err(RuntimeErr::return_val(val));
+        }
+
+        unreachable!("Non-return statement passed to Evaluator::eval_stmt_return");
     }
 
     fn eval_stmt_if(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -86,7 +126,7 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-print statement passed to Evaluator::eval_stmt_print");
+        unreachable!("Non-print statement passed to Evaluator::eval_stmt_print");
     }
 
     fn eval_stmt_while(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -98,7 +138,7 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-while statement passed to Evaluator::eval_stmt_while");
+        unreachable!("Non-while statement passed to Evaluator::eval_stmt_while");
     }
 
     fn eval_stmt_expr(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -108,7 +148,7 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-expr statement passed to Evaluator::eval_stmt_expr");
+        unreachable!("Non-expr statement passed to Evaluator::eval_stmt_expr");
     }
 
     fn eval_stmt_var(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -124,14 +164,29 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-var statement passed to Evaluator::eval_stmt_var");
+        unreachable!("Non-var statement passed to Evaluator::eval_stmt_var");
     }
 
-    fn eval_stmt_block(&mut self, stmt: &Stmt) -> EvalResult<()> {
+    fn eval_stmt_fn(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Fn {
+            name,
+            params: _,
+            body: _,
+        } = &stmt.kind
+        {
+            let function = Value::Callable(Rc::new(Function::new(stmt.clone(), self.env.clone())));
+            self.env.borrow_mut().define(name.clone(), function);
+            return Ok(());
+        }
+
+        unreachable!("Non-fn statement passed to Evaluator::eval_stmt_fn");
+    }
+
+    fn eval_stmt_block(&mut self, stmt: &Stmt, env: EnvPtr) -> EvalResult<()> {
         if let StmtKind::Block(statements) = &stmt.kind {
             let prev = self.env.clone();
 
-            self.env = Env::enclosed(self.env.clone());
+            self.env = env;
 
             for stmt in statements.iter() {
                 self.eval_stmt(stmt)?;
@@ -142,20 +197,22 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
 
-        panic!("Non-block statement passed to Evaluator::eval_stmt_block");
+        unreachable!("Non-block statement passed to Evaluator::eval_stmt_block");
     }
 
     // Expression eval functions
 
+    #[rustfmt::skip]
     fn eval_expr(&mut self, expr: &Expr) -> EvalResult<Value> {
         match &expr.kind {
-            ExprKind::Binary { left, op, right } => self.eval_expr_binary(expr),
-            ExprKind::Grouping { expr: gexpr } => self.eval_expr_grouping(expr),
-            ExprKind::Unary { op, right } => self.eval_expr_unary(expr),
-            ExprKind::Literal(lit) => self.eval_expr_literal(expr),
-            ExprKind::Var(name) => self.eval_expr_var(expr),
-            ExprKind::Assign { name, op, val } => self.eval_expr_assign(expr),
-            ExprKind::Logical { left, op, right } => self.eval_expr_logical(expr),
+            ExprKind::Binary { left: _, op: _, right: _ } => self.eval_expr_binary(expr),
+            ExprKind::Grouping { expr: _ } => self.eval_expr_grouping(expr),
+            ExprKind::Unary { op: _, right: _ } => self.eval_expr_unary(expr),
+            ExprKind::Literal(_lit) => self.eval_expr_literal(expr),
+            ExprKind::Call { callee: _, args: _ } => self.eval_expr_call(expr),
+            ExprKind::Var(_name) => self.eval_expr_var(expr),
+            ExprKind::Assign { name: _, op: _, val: _ } => self.eval_expr_assign(expr),
+            ExprKind::Logical { left: _, op: _, right: _ } => self.eval_expr_logical(expr),
         }
     }
 
@@ -184,7 +241,7 @@ impl<'a> Evaluator<'a> {
             return Ok(val);
         }
 
-        panic!("Non-assign passed to Evaluator::eval_expr_assign");
+        unreachable!("Non-assign passed to Evaluator::eval_expr_assign");
     }
 
     fn eval_expr_var(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -192,7 +249,7 @@ impl<'a> Evaluator<'a> {
             return Ok(self.env.borrow_mut().get(&name.clone(), expr.cursor)?);
         }
 
-        panic!("Non-var passed to Evaluator::eval_expr_var");
+        unreachable!("Non-var passed to Evaluator::eval_expr_var");
     }
 
     fn eval_expr_logical(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -212,7 +269,7 @@ impl<'a> Evaluator<'a> {
             return Ok(self.eval_expr(right)?);
         }
 
-        panic!("Non-logical passed to Evaluator::eval_expr_logical");
+        unreachable!("Non-logical passed to Evaluator::eval_expr_logical");
     }
 
     fn eval_expr_literal(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -225,7 +282,38 @@ impl<'a> Evaluator<'a> {
             };
         }
 
-        panic!("Non-literal passed to Evaluator::eval_expr_literal");
+        unreachable!("Non-literal passed to Evaluator::eval_expr_literal");
+    }
+
+    fn eval_expr_call(&mut self, expr: &Expr) -> EvalResult<Value> {
+        if let ExprKind::Call { callee, args } = &expr.kind {
+            let callee = self.eval_expr(callee)?;
+
+            let mut args_values: Vec<Value> = vec![];
+            for arg in args {
+                args_values.push(self.eval_expr(arg)?);
+            }
+
+            if let Value::Callable(c) = callee {
+                if args_values.len() != c.arity() {
+                    return Err(RuntimeErr::new(
+                        format!(
+                            "functions expects {} arguments but got {}",
+                            c.arity(),
+                            args_values.len()
+                        ),
+                        expr.cursor,
+                    ));
+                }
+                return Ok(c.call(self, args_values));
+            }
+            return Err(RuntimeErr::new(
+                "can't call non-function".into(),
+                expr.cursor,
+            ));
+        }
+
+        unreachable!("Non-call passed to Evaluator::eval_expr_call");
     }
 
     fn eval_expr_grouping(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -233,8 +321,7 @@ impl<'a> Evaluator<'a> {
             return Ok(self.eval_expr(expr)?);
         }
 
-        dbg!(expr);
-        panic!("Non-grouping passed to Evaluator::eval_expr_grouping");
+        unreachable!("Non-grouping passed to Evaluator::eval_expr_grouping");
     }
 
     fn eval_expr_unary(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -247,7 +334,7 @@ impl<'a> Evaluator<'a> {
             };
         }
 
-        panic!("Non-unary passed to Evaluator::eval_expr_unary");
+        unreachable!("Non-unary passed to Evaluator::eval_expr_unary");
     }
 
     fn eval_expr_binary(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -312,6 +399,6 @@ impl<'a> Evaluator<'a> {
             };
         }
 
-        panic!("Non-binary passed to Evaluator::eval_expr_binary");
+        unreachable!("Non-binary passed to Evaluator::eval_expr_binary");
     }
 }

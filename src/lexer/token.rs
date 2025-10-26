@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use strum::EnumDiscriminants;
 
 use crate::lexer::cursor::Cursor;
@@ -47,7 +48,59 @@ pub enum TokenKind {
     EOF,
 }
 
-use std::str::FromStr;
+impl ToString for TokenKindDiscriminants {
+    fn to_string(&self) -> String {
+        match self {
+            // Literals
+            TokenKindDiscriminants::Num => "Num",
+            TokenKindDiscriminants::Bool => "Bool",
+            TokenKindDiscriminants::Str => "Str",
+
+            // Assign
+            TokenKindDiscriminants::Assign => "Assign",
+            TokenKindDiscriminants::AddAssign => "AddAssign",
+            TokenKindDiscriminants::SubAssign => "SubAssign",
+            TokenKindDiscriminants::Incr => "Incr",
+            TokenKindDiscriminants::Decr => "Decr",
+
+            // Arithmetic
+            TokenKindDiscriminants::Add => "Add",
+            TokenKindDiscriminants::Sub => "Sub",
+            TokenKindDiscriminants::Mult => "Mult",
+            TokenKindDiscriminants::Div => "Div",
+            TokenKindDiscriminants::Mod => "Mod",
+            TokenKindDiscriminants::Pow => "Pow",
+
+            // Boolean
+            TokenKindDiscriminants::Not => "Not",
+            TokenKindDiscriminants::Equals => "Equals",
+            TokenKindDiscriminants::NotEquals => "NotEquals",
+            TokenKindDiscriminants::Greater => "Greater",
+            TokenKindDiscriminants::GreaterEquals => "GreaterEquals",
+            TokenKindDiscriminants::Lesser => "Lesser",
+            TokenKindDiscriminants::LesserEquals => "LesserEquals",
+            TokenKindDiscriminants::Nullish => "Nullish",
+
+            // Symbols
+            TokenKindDiscriminants::LParen => "LParen",
+            TokenKindDiscriminants::RParen => "RParen",
+            TokenKindDiscriminants::LBracket => "LBracket",
+            TokenKindDiscriminants::RBracket => "RBracket",
+            TokenKindDiscriminants::LBrace => "LBrace",
+            TokenKindDiscriminants::RBrace => "RBrace",
+            TokenKindDiscriminants::Comma => "Comma",
+            TokenKindDiscriminants::Dot => "Dot",
+
+            // Other
+            TokenKindDiscriminants::Keyword => "Keyword",
+            TokenKindDiscriminants::Identifier => "Identifier",
+            TokenKindDiscriminants::NULL => "NULL",
+            TokenKindDiscriminants::EOL => "EOL",
+            TokenKindDiscriminants::EOF => "EOF",
+        }
+        .into()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeywordKind {

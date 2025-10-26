@@ -3,9 +3,9 @@
 a simple interpreted scripting language
 
 ```rb
-sq(n) = n*n
+fn sq(n) = n*n
 
-main() do
+fn main() do
     var a = sq(10)
     var b = true
     b = false
@@ -13,10 +13,10 @@ main() do
     # this is a comment
 
     if a == 100 do
-        print "poggers"
+        print("poggers")
     end
 
-    print a
+    print(a)
 end
 
 main()

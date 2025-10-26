@@ -4,6 +4,7 @@ use crate::{lexer::cursor::Cursor, parser::expr::Expr};
 pub enum StmtKind {
     Expr(Expr),
     Print(Expr),
+    Return(Option<Expr>),
     Var {
         name: String,
         init: Option<Expr>
@@ -16,6 +17,11 @@ pub enum StmtKind {
     },
     While {
         condition: Expr,
+        body: Box<Stmt>
+    },
+    Fn {
+        name: String,
+        params: Vec<String>,
         body: Box<Stmt>
     }
 }

@@ -2,6 +2,8 @@ pub mod expr;
 pub mod parse_err;
 pub mod stmt;
 
+use strum::IntoDiscriminant;
+
 use crate::{
     lexer::token::{KeywordKind, Token, TokenKind, TokenKindDiscriminants},
     parser::{
@@ -13,6 +15,36 @@ use crate::{
     src::Src,
 };
 
+#[derive(Default, Clone)]
+pub struct ParserOutput {
+    pub ast: Option<Vec<Stmt>>,
+    pub errors: Option<Vec<ParseErr>>,
+    pub error_count: usize,
+    pub warning_count: usize,
+}
+
+impl ParserOutput {
+    fn add_stmt(&mut self, stmt: Stmt) {
+        if let None = self.ast {
+            self.ast = Some(vec![]);
+        }
+        if let Some(ast) = self.ast.as_mut() {
+            ast.push(stmt);
+        }
+    }
+
+    fn add_err(&mut self, error: ParseErr) {
+        if let None = self.errors {
+            self.errors = Some(vec![]);
+            self.ast = None;
+        }
+        if let Some(errors) = self.errors.as_mut() {
+            errors.push(error);
+            self.error_count += 1;
+        }
+    }
+}
+
 pub struct Parser<'a> {
     /// Source code
     src: &'a Src,
@@ -20,6 +52,8 @@ pub struct Parser<'a> {
     tokens: Vec<Token>,
     /// Index of the current token
     curr: usize,
+    /// Parser output
+    out: ParserOutput,
 }
 
 impl<'a> Parser<'a> {
@@ -28,12 +62,11 @@ impl<'a> Parser<'a> {
             src,
             tokens: src.tokens.as_ref().expect("ecpected tokens").clone(),
             curr: 0,
+            out: ParserOutput::default(),
         }
     }
 
-    pub fn parse(&mut self) -> Option<Vec<Stmt>> {
-        let mut statements: Vec<Stmt> = vec![];
-
+    pub fn parse(&mut self) -> ParserOutput {
         self.skip_eols();
 
         while !self.is_at_end() {
@@ -41,18 +74,18 @@ impl<'a> Parser<'a> {
 
             match stmt {
                 Ok(stmt) => {
-                    statements.push(stmt.clone());
+                    self.out.add_stmt(stmt.clone());
                     self.skip_eols();
                 }
                 Err(err) => {
-                    Reporter::error_at(&err.msg, self.src, err.cursor);
+                    self.out.add_err(err.clone());
+                    Reporter::parse_err_at(&err, self.src);
                     self.synchronize();
-                    return None;
                 }
             }
         }
 
-        Some(statements)
+        self.out.clone()
     }
 
     // Grammar functions
@@ -62,6 +95,10 @@ impl<'a> Parser<'a> {
     fn declr(&mut self) -> ParseResult<Stmt> {
         if self.match_keyword(KeywordKind::Var) {
             return self.var_declr(true);
+        }
+
+        if self.match_keyword(KeywordKind::Fn) {
+            return self.fn_declr();
         }
 
         self.stmt()
@@ -92,9 +129,65 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn fn_declr(&mut self) -> ParseResult<Stmt> {
+        let name_token =
+            self.consume(TokenKindDiscriminants::Identifier, "expected function name")?;
+        let mut name = String::new();
+        if let TokenKind::Identifier(ident) = name_token.kind {
+            name = ident;
+        }
+        self.consume(
+            TokenKindDiscriminants::LParen,
+            "expected '(' after function name",
+        )?;
+
+        let mut params: Vec<String> = vec![];
+        if !self.check(TokenKindDiscriminants::RParen) {
+            loop {
+                if params.len() >= 255 {
+                    self.out.add_err(ParseErr::new(
+                        "functions cannot have more than 255 arguments".into(),
+                        self.current().cursor,
+                    ));
+                }
+
+                let ident = self.consume(
+                    TokenKindDiscriminants::Identifier,
+                    "expected parameter name",
+                )?;
+                if let TokenKind::Identifier(name) = ident.kind {
+                    params.push(name);
+                }
+
+                if !self.match_tokens(vec![TokenKindDiscriminants::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(
+            TokenKindDiscriminants::RParen,
+            "expected ')' after function parameters",
+        )?;
+
+        self.consume_keyword(KeywordKind::Do, "expected 'do' before function body")?;
+        let body = self.block_stmt()?;
+        Ok(Stmt::new(
+            StmtKind::Fn {
+                name,
+                params,
+                body: Box::new(body),
+            },
+            self.current().cursor,
+        ))
+    }
+
     fn stmt(&mut self) -> ParseResult<Stmt> {
         if self.match_keyword(KeywordKind::Print) {
             return self.print_stmt();
+        }
+        if self.match_keyword(KeywordKind::Return) {
+            return self.return_stmt();
         }
         if self.match_keyword(KeywordKind::Do) {
             return self.block_stmt();
@@ -224,6 +317,20 @@ impl<'a> Parser<'a> {
             "expected '\\n' after expression",
         )?;
         Ok(Stmt::new(StmtKind::Print(val), self.previous().cursor))
+    }
+
+    fn return_stmt(&mut self) -> ParseResult<Stmt> {
+        let mut val: Option<Expr> = None;
+
+        if !self.check(TokenKindDiscriminants::EOL) {
+            val = Some(self.expr()?);
+        }
+
+        self.consume(
+            TokenKindDiscriminants::EOL,
+            "expected '\\n' after return value",
+        )?;
+        Ok(Stmt::new(StmtKind::Return(val), self.previous().cursor))
     }
 
     fn block_stmt(&mut self) -> ParseResult<Stmt> {
@@ -428,7 +535,54 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        Ok(self.primary()?)
+        Ok(self.call()?)
+    }
+
+    fn call(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_tokens(vec![TokenKindDiscriminants::LParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ParseResult<Expr> {
+        let mut args: Vec<Expr> = vec![];
+
+        if !self.check(TokenKindDiscriminants::RParen) {
+            loop {
+                if args.len() >= 255 {
+                    self.out.add_err(ParseErr::new(
+                        "functions cannot have more than 255 arguments".into(),
+                        callee.cursor,
+                    ));
+                }
+
+                args.push(self.expr()?);
+
+                if !self.match_tokens(vec![TokenKindDiscriminants::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let rparen = self.consume(
+            TokenKindDiscriminants::RParen,
+            "expected ')' after function arguments",
+        )?;
+        Ok(Expr::new(
+            ExprKind::Call {
+                callee: Box::new(callee),
+                args,
+            },
+            rparen.cursor,
+        ))
     }
 
     fn primary(&mut self) -> ParseResult<Expr> {
@@ -518,10 +672,12 @@ impl<'a> Parser<'a> {
             return Ok(self.next());
         }
 
-        Err(ParseErr::new(msg.into(), self.current().cursor))
+        Err(ParseErr::new(msg.into(), self.previous().cursor)
+            .expected(token.to_string())
+            .found(self.current().kind.discriminant().to_string()))
     }
 
-    fn consume_multiple(
+    fn _consume_multiple(
         &mut self,
         tokens: Vec<TokenKindDiscriminants>,
         msg: &str,
@@ -545,7 +701,7 @@ impl<'a> Parser<'a> {
             return Ok(self.next());
         }
 
-        Err(ParseErr::new(msg.into(), self.current().cursor))
+        Err(ParseErr::new(msg.into(), self.current().cursor).expected(keyword.to_string()))
     }
 
     fn check(&self, token: TokenKindDiscriminants) -> bool {
@@ -605,8 +761,19 @@ impl<'a> Parser<'a> {
         self.next();
 
         while !self.is_at_end() {
-            if self.previous().kind == TokenKind::EOL {
-                return;
+            match self.peek().kind {
+                TokenKind::Keyword(keyword) => match keyword {
+                    KeywordKind::Fn
+                    | KeywordKind::Var
+                    | KeywordKind::For
+                    | KeywordKind::If
+                    | KeywordKind::While
+                    | KeywordKind::Print => {
+                        break;
+                    }
+                    _ => {}
+                },
+                _ => {}
             }
 
             self.next();

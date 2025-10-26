@@ -5,16 +5,20 @@
 ```js
 program        → statement* EOF ;
 
-
-declaration    → varDecl
+declaration    → funDecl
+               | varDecl
                | statement ;
 
+funDecl        → "fn" function ;
+function       → IDENTIFIER "(" parameters? ")" block ;
+parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 varDecl        → IDENTIFIER ( "=" expression )? EOL ;
 
 statement      → exprStmt
                | ifStmt
                | forStmt
                | printStmt
+               | returnStmt
                | whileStmt
                | block ;
 
@@ -25,6 +29,7 @@ forStmt        → "for" ( varDecl | exprStmt | "and" )
                  expression? "and"
                  expression? statement ;
 printStmt      → "print" expression EOL ;
+returnStmt     → "return" expression EOL ;
 whileStmt      → "while" "(" expression ")" statement ;
 block          → "do" declaration "end" ;
 
@@ -37,8 +42,9 @@ equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" | "**" | "??" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
+unary          → ( "!" | "-" ) unary | call ;
+arguments      → expression ( "," expression )* ;
+call           → primary ( "(" arguments? ")" )* ;
 primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")"
                | IDENTIFIER ;

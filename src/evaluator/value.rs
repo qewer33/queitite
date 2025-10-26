@@ -1,6 +1,12 @@
-use std::fmt::Display;
+use std::{
+    fmt::{Debug, Display},
+    rc::Rc,
+};
 
-use crate::{evaluator::runtime_err::RuntimeErr, lexer::cursor::Cursor};
+use crate::{
+    evaluator::{Evaluator, runtime_err::RuntimeErr},
+    lexer::cursor::Cursor,
+};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -8,6 +14,7 @@ pub enum Value {
     Bool(bool),
     Num(f64),
     Str(String),
+    Callable(Rc<dyn Callable>),
     // Array(Rc<RefCell<Vec<Value>>>),
 }
 
@@ -18,39 +25,51 @@ impl Display for Value {
             Value::Bool(b) => write!(f, "{b}"),
             Value::Num(n) => write!(f, "{n}"),
             Value::Str(s) => write!(f, "{s}"),
+            Value::Callable(c) => write!(f, "{:?}", c),
         }
     }
 }
 
 impl Value {
     pub fn is_equal(&self, other: &Value) -> bool {
-        if let Value::Null = self
-            && let Value::Null = other
-        {
-            return true;
-        } else if let Value::Null = self {
-            return false;
+        match self {
+            Value::Null => {
+                if let Value::Null = other {
+                    return true;
+                }
+                return false;
+            }
+            Value::Bool(b) => {
+                if let Value::Bool(ob) = other {
+                    return b == ob;
+                }
+                return false;
+            }
+            Value::Num(n) => {
+                if let Value::Num(on) = other {
+                    return n == on;
+                }
+                return false;
+            }
+            Value::Str(s) => {
+                if let Value::Str(os) = other {
+                    return s == os;
+                }
+                return false;
+            }
+            Value::Callable(_) => {
+                return false;
+            }
         }
-
-        self.cast_num() == other.cast_num()
     }
 
     pub fn is_truthy(&self) -> bool {
-        // false, 0 and Null are falsy values, everything else is thruthy
+        // false, 0 and Null are falsey values, everything else is thruthy
         match self {
             Value::Bool(b) => *b,
             Value::Null => false,
             Value::Num(n) => *n == 0.,
             _ => true,
-        }
-    }
-
-    pub fn cast_num(&self) -> f64 {
-        match self {
-            Value::Bool(b) => return (*b) as i32 as f64,
-            Value::Null => return 0.,
-            Value::Num(n) => return *n,
-            Value::Str(s) => return s.len() as f64,
         }
     }
 
@@ -63,4 +82,10 @@ impl Value {
             cursor,
         ))
     }
+}
+
+pub trait Callable: Debug {
+    fn name(&self) -> &str;
+    fn arity(&self) -> usize;
+    fn call(&self, evaluator: &mut Evaluator, args: Vec<Value>) -> Value;
 }

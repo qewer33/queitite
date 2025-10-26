@@ -16,6 +16,10 @@ pub enum ExprKind {
         op: BinaryOp,
         right: Box<Expr>,
     },
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Expr>
+    },
     Grouping {
         expr: Box<Expr>,
     },
