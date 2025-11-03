@@ -104,7 +104,6 @@ impl ToString for TokenKindDiscriminants {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeywordKind {
-    // Core
     Do,
     End,
     If,
@@ -120,12 +119,9 @@ pub enum KeywordKind {
     And,
     Or,
     Step,
-    // Reserved
     Fn,
     Obj,
-    New,
     Err,
-    Amogus,
 }
 
 impl ToString for KeywordKind {
@@ -146,12 +142,9 @@ impl ToString for KeywordKind {
             KeywordKind::And => "and",
             KeywordKind::Or => "or",
             KeywordKind::Step => "step",
-
             KeywordKind::Fn => "fn",
             KeywordKind::Obj => "obj",
-            KeywordKind::New => "new",
             KeywordKind::Err => "err",
-            KeywordKind::Amogus => "amogus",
         }
         .into()
     }
@@ -177,12 +170,9 @@ impl FromStr for KeywordKind {
             "and" => Ok(KeywordKind::And),
             "or" => Ok(KeywordKind::Or),
             "step" => Ok(KeywordKind::Step),
-
             "fn" => Ok(KeywordKind::Fn),
             "obj" => Ok(KeywordKind::Obj),
-            "new" => Ok(KeywordKind::New),
             "err" => Ok(KeywordKind::Err),
-            "amogus" => Ok(KeywordKind::Amogus),
 
             _ => Err(()),
         }

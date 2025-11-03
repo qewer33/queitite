@@ -35,6 +35,17 @@ pub enum ExprKind {
         right: Box<Expr>,
     },
     Var(String),
+    Get {
+        obj: Box<Expr>,
+        name: String,
+    },
+    Set {
+        obj: Box<Expr>,
+        name: String,
+        op: AssignOp,
+        val: Box<Expr>,
+    },
+    ESelf,
 }
 
 #[derive(Debug, Clone)]

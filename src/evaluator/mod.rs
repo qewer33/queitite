@@ -1,20 +1,25 @@
 pub mod env;
 pub mod function;
 pub mod natives;
+pub mod object;
 pub mod resolver;
 pub mod runtime_err;
 pub mod value;
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
+
+use ordered_float::OrderedFloat;
 
 use crate::{
     evaluator::{
         env::{Env, EnvPtr},
         function::Function,
         natives::Natives,
+        object::Object,
         runtime_err::{EvalResult, RuntimeErr, RuntimeEvent},
-        value::Value,
+        value::{Callable, Value},
     },
+    lexer::token::KeywordKind,
     parser::{
         expr::{AssignOp, BinaryOp, Expr, ExprKind, LiteralType, LogicalOp, UnaryOp},
         stmt::{Stmt, StmtKind},
@@ -71,6 +76,7 @@ impl<'a> Evaluator<'a> {
             StmtKind::If { .. } => self.eval_stmt_if(stmt),
             StmtKind::While { .. } => self.eval_stmt_while(stmt),
             StmtKind::Fn { .. } => self.eval_stmt_fn(stmt),
+            StmtKind::Obj { .. } => self.eval_stmt_obj(stmt),
         }
     }
 
@@ -172,12 +178,38 @@ impl<'a> Evaluator<'a> {
     }
 
     fn eval_stmt_fn(&mut self, stmt: &Stmt) -> EvalResult<()> {
-        if let StmtKind::Fn { name, .. } = &stmt.kind {
-            let function = Value::Callable(Rc::new(Function::new(stmt.clone(), self.env.clone())));
+        if let StmtKind::Fn { name, bound, .. } = &stmt.kind {
+            let function = Value::Callable(Rc::new(Function::new(
+                stmt.clone(),
+                self.env.clone(),
+                *bound,
+            )));
             self.env.borrow_mut().define(name.clone(), function);
             return Ok(());
         }
         unreachable!("Non-fn statement passed to Evaluator::eval_stmt_fn");
+    }
+
+    fn eval_stmt_obj(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Obj { name, methods } = &stmt.kind {
+            self.env.borrow_mut().define(name.clone(), Value::Null);
+
+            let mut obj_methods: HashMap<String, Function> = HashMap::new();
+            for method in methods.to_owned() {
+                if let StmtKind::Fn { bound, .. } = &method.kind {
+                    let function: Function = Function::new(method.clone(), self.env.clone(), *bound);
+                    obj_methods.insert(function.name().to_string(), function);
+                }
+            }
+
+            self.env.borrow_mut().assign(
+                name.as_str(),
+                Value::Obj(Rc::new(Object::new(name.clone(), obj_methods))),
+                stmt.cursor,
+            )?;
+            return Ok(());
+        }
+        unreachable!("Non-obj statement passed to Evaluator::eval_stmt_obj");
     }
 
     fn eval_stmt_block(&mut self, stmt: &Stmt, env: EnvPtr) -> EvalResult<()> {
@@ -201,17 +233,19 @@ impl<'a> Evaluator<'a> {
 
     // Expression functions
 
-    #[rustfmt::skip]
     fn eval_expr(&mut self, expr: &Expr) -> EvalResult<Value> {
         match &expr.kind {
-            ExprKind::Binary   { .. } => self.eval_expr_binary(expr),
+            ExprKind::Binary { .. } => self.eval_expr_binary(expr),
             ExprKind::Grouping { .. } => self.eval_expr_grouping(expr),
-            ExprKind::Unary    { .. } => self.eval_expr_unary(expr),
-            ExprKind::Literal  (_)  => self.eval_expr_literal(expr),
-            ExprKind::Call     { .. } => self.eval_expr_call(expr),
-            ExprKind::Var      (_)  => self.eval_expr_var(expr),
-            ExprKind::Assign   { .. } => self.eval_expr_assign(expr),
-            ExprKind::Logical  { .. } => self.eval_expr_logical(expr),
+            ExprKind::Unary { .. } => self.eval_expr_unary(expr),
+            ExprKind::Literal(_) => self.eval_expr_literal(expr),
+            ExprKind::Call { .. } => self.eval_expr_call(expr),
+            ExprKind::Var(_) => self.eval_expr_var(expr),
+            ExprKind::Assign { .. } => self.eval_expr_assign(expr),
+            ExprKind::Logical { .. } => self.eval_expr_logical(expr),
+            ExprKind::Get { .. } => self.eval_expr_get(expr),
+            ExprKind::Set { .. } => self.eval_expr_set(expr),
+            ExprKind::ESelf => self.lookup_var(KeywordKind::KSelf.to_string().as_str(), expr),
         }
     }
 
@@ -273,7 +307,7 @@ impl<'a> Evaluator<'a> {
         if let ExprKind::Literal(literal) = &expr.kind {
             return match literal {
                 LiteralType::Null => Ok(Value::Null),
-                LiteralType::Num(i) => Ok(Value::Num(*i)),
+                LiteralType::Num(i) => Ok(Value::Num(OrderedFloat(*i))),
                 LiteralType::Bool(b) => Ok(Value::Bool(*b)),
                 LiteralType::Str(s) => Ok(Value::Str(s.clone())),
             };
@@ -302,12 +336,87 @@ impl<'a> Evaluator<'a> {
                 }
                 return Ok(c.call(self, args_values)?);
             }
+
+            if let Value::Obj(obj) = callee {
+                if args_values.len() != obj.arity() {
+                    return Err(RuntimeEvent::error(
+                        format!(
+                            "object initializer expects {} arguments but got {}",
+                            obj.arity(),
+                            args_values.len()
+                        ),
+                        expr.cursor,
+                    ));
+                }
+                return Ok(obj.call(self, args_values)?);
+            }
+
             return Err(RuntimeEvent::error(
-                "can't call non-function".into(),
+                "can only call functions or objects".into(),
                 expr.cursor,
             ));
         }
         unreachable!("Non-call passed to Evaluator::eval_expr_call");
+    }
+
+    fn eval_expr_get(&mut self, expr: &Expr) -> EvalResult<Value> {
+        if let ExprKind::Get { obj, name } = &expr.kind {
+            let val = self.eval_expr(obj)?;
+
+            if let Value::ObjInstance(inst) = val {
+                return Ok(inst.borrow().get(name.clone(), expr.cursor)?);
+            }
+
+            if let Value::Obj(obj) = val {
+                if let Some(func) = obj.methods.get(&name.clone()) {
+                    if !func.bound {
+                        return Ok(Value::Callable(Rc::new(func.clone())));
+                    } else {
+                        return Err(RuntimeEvent::error(
+                            format!(
+                                "can't call non-static method {} of object {} without an instance",
+                                name, obj.name
+                            ),
+                            expr.cursor,
+                        ));
+                    }
+                }
+                return Err(RuntimeEvent::error(
+                    format!("static method {} undefined in object {}", name, obj.name),
+                    expr.cursor,
+                ));
+            }
+
+            return Err(RuntimeEvent::error(
+                "only instances have properties".into(),
+                expr.cursor,
+            ));
+        }
+        unreachable!("Non-get passed to Evaluator::eval_expr_get");
+    }
+
+    fn eval_expr_set(&mut self, expr: &Expr) -> EvalResult<Value> {
+        if let ExprKind::Set {
+            obj,
+            name,
+            op: _,
+            val,
+        } = &expr.kind
+        {
+            let obj = self.eval_expr(obj)?;
+
+            if let Value::ObjInstance(inst) = obj {
+                let set_val = self.eval_expr(val)?;
+                inst.borrow_mut().set(name.clone(), set_val.clone());
+                return Ok(set_val);
+            }
+
+            return Err(RuntimeEvent::error(
+                "only instances have fields".into(),
+                expr.cursor,
+            ));
+        }
+        unreachable!("Non-set passed to Evaluator::eval_expr_set");
     }
 
     fn eval_expr_grouping(&mut self, expr: &Expr) -> EvalResult<Value> {
@@ -321,7 +430,7 @@ impl<'a> Evaluator<'a> {
         if let ExprKind::Unary { op, right } = &expr.kind {
             let right = self.eval_expr(right)?;
             return match op {
-                UnaryOp::Negate => Ok(Value::Num(-right.check_num(expr.cursor)?)),
+                UnaryOp::Negate => Ok(Value::Num(OrderedFloat(-right.check_num(expr.cursor)?))),
                 UnaryOp::Not => Ok(Value::Bool(!right.is_truthy())),
             };
         }
@@ -344,21 +453,21 @@ impl<'a> Evaluator<'a> {
                         Ok(Value::Null)
                     }
                 }
-                BinaryOp::Sub => Ok(Value::Num(
+                BinaryOp::Sub => Ok(Value::Num(OrderedFloat(
                     left.check_num(cursor)? - right.check_num(cursor)?,
-                )),
-                BinaryOp::Mult => Ok(Value::Num(
+                ))),
+                BinaryOp::Mult => Ok(Value::Num(OrderedFloat(
                     left.check_num(cursor)? * right.check_num(cursor)?,
-                )),
-                BinaryOp::Div => Ok(Value::Num(
+                ))),
+                BinaryOp::Div => Ok(Value::Num(OrderedFloat(
                     left.check_num(cursor)? / right.check_num(cursor)?,
-                )),
-                BinaryOp::Mod => Ok(Value::Num(
+                ))),
+                BinaryOp::Mod => Ok(Value::Num(OrderedFloat(
                     left.check_num(cursor)? % right.check_num(cursor)?,
-                )),
-                BinaryOp::Pow => Ok(Value::Num(
+                ))),
+                BinaryOp::Pow => Ok(Value::Num(OrderedFloat(
                     left.check_num(cursor)?.powf(right.check_num(cursor)?),
-                )),
+                ))),
                 BinaryOp::Equals => Ok(Value::Bool(left.is_equal(&right))),
                 BinaryOp::NotEquals => Ok(Value::Bool(!left.is_equal(&right))),
                 BinaryOp::Greater => Ok(Value::Bool(

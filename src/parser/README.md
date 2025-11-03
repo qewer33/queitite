@@ -5,10 +5,12 @@
 ```js
 program        → statement* EOF ;
 
-declaration    → funDeclr
-               | varDeclr
+declaration    → classDecl
+               | funDecl
+               | varDecl
                | statement ;
 
+classDecl      → "obj" IDENTIFIER "{" function* "}" ;
 funDeclr       → "fn" function ;
 function       → IDENTIFIER "(" parameters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
@@ -37,7 +39,7 @@ whileStmt      → varDeclrHeader? "while" expression ("step" assignment)? state
 block          → "do" declaration "end" ;
 
 expression     → assignment ;
-assignment     → IDENTIFIER ("=" | "+=" | "-=" ) assignment
+assignment     → ( call "." )? IDENTIFIER ("=" | "+=" | "-=" ) assignment
                | logic_or ;
 logic_or       → logic_and ( "or" logic_and )* ;
 logic_and      → equality ( "and" equality )* ;
@@ -47,7 +49,7 @@ term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" | "**" | "??" ) unary )* ;
 unary          → ( "!" | "-" ) unary | call ;
 arguments      → expression ( "," expression )* ;
-call           → primary ( "(" arguments? ")" )* ;
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")"
                | IDENTIFIER ;

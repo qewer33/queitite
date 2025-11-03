@@ -96,9 +96,11 @@ impl<'a> Parser<'a> {
         if self.match_keyword(KeywordKind::Var) {
             return self.var_declr(true);
         }
-
         if self.match_keyword(KeywordKind::Fn) {
             return self.fn_declr();
+        }
+        if self.match_keyword(KeywordKind::Obj) {
+            return self.obj_declr();
         }
 
         self.stmt()
@@ -134,10 +136,7 @@ impl<'a> Parser<'a> {
                 "expected '\\n' after variable declaration",
             )?;
         }
-        Ok(Stmt::new(
-            StmtKind::Var { name, init },
-            self.previous().cursor,
-        ))
+        Ok(Stmt::new(StmtKind::Var { name, init }, ident.cursor))
     }
 
     fn fn_declr(&mut self) -> ParseResult<Stmt> {
@@ -152,6 +151,8 @@ impl<'a> Parser<'a> {
             "expected '(' after function name",
         )?;
 
+        let mut bound = false;
+
         let mut params: Vec<String> = vec![];
         if !self.check(TokenKindDiscriminants::RParen) {
             loop {
@@ -162,12 +163,20 @@ impl<'a> Parser<'a> {
                     ));
                 }
 
-                let ident = self.consume(
-                    TokenKindDiscriminants::Identifier,
-                    "expected parameter name",
-                )?;
-                if let TokenKind::Identifier(name) = ident.kind {
-                    params.push(name);
+                if let TokenKind::Keyword(keyword) = self.current().kind {
+                    if let KeywordKind::KSelf = keyword {
+                        bound = true;
+                        self.next();
+                    }
+                } else {
+                    let ident = self.consume(
+                        TokenKindDiscriminants::Identifier,
+                        "expected parameter name",
+                    )?;
+
+                    if let TokenKind::Identifier(name) = ident.kind {
+                        params.push(name);
+                    }
                 }
 
                 if !self.match_tokens(vec![TokenKindDiscriminants::Comma]) {
@@ -188,8 +197,34 @@ impl<'a> Parser<'a> {
                 name,
                 params,
                 body: Box::new(body),
+                bound,
             },
-            self.current().cursor,
+            name_token.cursor,
+        ))
+    }
+
+    fn obj_declr(&mut self) -> ParseResult<Stmt> {
+        let name_token =
+            self.consume(TokenKindDiscriminants::Identifier, "expected object name")?;
+        let mut name = String::new();
+        if let TokenKind::Identifier(ident) = name_token.kind {
+            name = ident;
+        }
+
+        self.consume_keyword(KeywordKind::Do, "expected 'do' before object body")?;
+        self.skip_eols();
+
+        let mut methods: Vec<Stmt> = vec![];
+        while !self.check_keyword(KeywordKind::End) && !self.is_at_end() {
+            methods.push(self.fn_declr()?);
+            self.skip_eols();
+        }
+
+        self.consume_keyword(KeywordKind::End, "expected 'end' after object body")?;
+
+        Ok(Stmt::new(
+            StmtKind::Obj { name, methods },
+            name_token.cursor,
         ))
     }
 
@@ -374,7 +409,7 @@ impl<'a> Parser<'a> {
         }
 
         if !self.check_keyword(KeywordKind::Else) {
-            self.consume_keyword(KeywordKind::End, "Expected closing \"do\" after block")?;
+            self.consume_keyword(KeywordKind::End, "Expected closing \"end\" after block")?;
         }
         Ok(Stmt::new(
             StmtKind::Block(statements),
@@ -410,6 +445,18 @@ impl<'a> Parser<'a> {
             if let ExprKind::Var(name) = expr.kind {
                 return Ok(Expr::new(
                     ExprKind::Assign {
+                        name,
+                        op,
+                        val: Box::new(val),
+                    },
+                    self.previous().cursor,
+                ));
+            }
+
+            if let ExprKind::Get { obj, name } = expr.kind {
+                return Ok(Expr::new(
+                    ExprKind::Set {
+                        obj,
                         name,
                         op,
                         val: Box::new(val),
@@ -570,6 +617,20 @@ impl<'a> Parser<'a> {
         loop {
             if self.match_tokens(vec![TokenKindDiscriminants::LParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_tokens(vec![TokenKindDiscriminants::Dot]) {
+                let ident = self.consume(
+                    TokenKindDiscriminants::Identifier,
+                    "expected property name after '.'",
+                )?;
+                if let TokenKind::Identifier(name) = ident.kind {
+                    expr = Expr::new(
+                        ExprKind::Get {
+                            obj: Box::new(expr),
+                            name,
+                        },
+                        self.current().cursor,
+                    );
+                }
             } else {
                 break;
             }
@@ -662,6 +723,9 @@ impl<'a> Parser<'a> {
             if let TokenKind::Identifier(name) = self.previous().kind {
                 return Ok(Expr::new(ExprKind::Var(name), self.previous().cursor));
             }
+        }
+        if self.match_keyword(KeywordKind::KSelf) {
+            return Ok(Expr::new(ExprKind::ESelf, self.previous().cursor));
         }
 
         Err(ParseErr::new(

@@ -26,6 +26,11 @@ pub enum StmtKind {
         name: String,
         params: Vec<String>,
         body: Box<Stmt>,
+        bound: bool,
+    },
+    Obj {
+        name: String,
+        methods: Vec<Stmt>,
     },
 }
 

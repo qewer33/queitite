@@ -2,41 +2,44 @@ use crate::{
     evaluator::{
         Evaluator,
         env::{Env, EnvPtr},
+        object::Instance,
         runtime_err::{EvalResult, RuntimeEvent},
         value::{Callable, Value},
-    },
-    parser::stmt::{Stmt, StmtKind},
+    }, lexer::token::KeywordKind, parser::stmt::{Stmt, StmtKind}
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
-    declr: Stmt,
-    closure: EnvPtr,
+    pub declr: Stmt,
+    pub closure: EnvPtr,
+    pub bound: bool
 }
 
 impl Function {
-    pub fn new(declr: Stmt, closure: EnvPtr) -> Self {
-        if let StmtKind::Fn {
-            name: _,
-            params: _,
-            body: _,
-        } = declr.clone().kind
-        {
-            return Self { declr, closure };
+    pub fn new(declr: Stmt, closure: EnvPtr, bound: bool) -> Self {
+        if let StmtKind::Fn { .. } = declr.clone().kind {
+            return Self { declr, closure, bound };
         }
-
         unreachable!("Non-fn statement passed as declaration to Function::new(declr)");
+    }
+
+    pub fn bind_method(self, val: Value) -> Function {
+        if let Value::ObjInstance(_) = val {
+            if let StmtKind::Fn { name, bound, .. } = self.declr.kind.clone() {
+                let env = Env::enclosed(self.closure.clone());
+                if bound || name == "init"  {
+                    env.borrow_mut().define("self".to_string(), val);
+                }
+                return Function::new(self.declr, env, bound);
+            }
+        }
+        unreachable!("Non-obj value passed to Function::bind(val)");
     }
 }
 
 impl Callable for Function {
     fn name(&self) -> &str {
-        if let StmtKind::Fn {
-            name,
-            params: _,
-            body: _,
-        } = &self.declr.kind
-        {
+        if let StmtKind::Fn { name, .. } = &self.declr.kind {
             return name;
         }
 
@@ -44,12 +47,7 @@ impl Callable for Function {
     }
 
     fn arity(&self) -> usize {
-        if let StmtKind::Fn {
-            name: _,
-            params,
-            body: _,
-        } = &self.declr.kind
-        {
+        if let StmtKind::Fn { params, .. } = &self.declr.kind {
             return params.len();
         }
 
@@ -57,12 +55,7 @@ impl Callable for Function {
     }
 
     fn call(&self, evaluator: &mut Evaluator, args: Vec<Value>) -> EvalResult<Value> {
-        if let StmtKind::Fn {
-            name: _,
-            params,
-            body,
-        } = &self.declr.kind
-        {
+        if let StmtKind::Fn { params, body, .. } = &self.declr.kind {
             let env = Env::enclosed(self.closure.clone());
 
             for (i, param) in params.iter().enumerate() {

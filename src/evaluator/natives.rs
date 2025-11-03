@@ -4,6 +4,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ordered_float::OrderedFloat;
+
 use crate::evaluator::{
     Evaluator, env::{Env, EnvPtr}, runtime_err::EvalResult, value::{Callable, Value}
 };
@@ -84,6 +86,6 @@ impl Callable for FnClock {
         let from_epoch = start
             .duration_since(UNIX_EPOCH)
             .expect("time should go forward");
-        Ok(Value::Num(from_epoch.as_millis() as f64))
+        Ok(Value::Num(OrderedFloat(from_epoch.as_millis() as f64)))
     }
 }

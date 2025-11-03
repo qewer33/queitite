@@ -1,10 +1,17 @@
 use std::{
+    cell::RefCell,
     fmt::{Debug, Display},
     rc::Rc,
 };
 
+use ordered_float::OrderedFloat;
+
 use crate::{
-    evaluator::{Evaluator, runtime_err::{EvalResult, RuntimeEvent}},
+    evaluator::{
+        Evaluator,
+        object::{Instance, Object},
+        runtime_err::{EvalResult, RuntimeEvent},
+    },
     lexer::cursor::Cursor,
 };
 
@@ -12,10 +19,11 @@ use crate::{
 pub enum Value {
     Null,
     Bool(bool),
-    Num(f64),
+    Num(OrderedFloat<f64>),
     Str(String),
     Callable(Rc<dyn Callable>),
-    // Array(Rc<RefCell<Vec<Value>>>),
+    Obj(Rc<Object>),
+    ObjInstance(Rc<RefCell<Instance>>),
 }
 
 impl Display for Value {
@@ -23,9 +31,11 @@ impl Display for Value {
         match self {
             Value::Null => write!(f, "null"),
             Value::Bool(b) => write!(f, "{b}"),
-            Value::Num(n) => write!(f, "{n}"),
+            Value::Num(n) => write!(f, "{}", n.0),
             Value::Str(s) => write!(f, "{s}"),
             Value::Callable(c) => write!(f, "{:?}", c),
+            Value::Obj(o) => write!(f, "{}", o.name),
+            Value::ObjInstance(i) => write!(f, "{}", i.borrow().to_string()),
         }
     }
 }
@@ -57,7 +67,16 @@ impl Value {
                 }
                 return false;
             }
+            Value::Obj(o) => {
+                if let Value::Obj(oo) = other {
+                    return o.name == oo.name;
+                }
+                return false;
+            }
             Value::Callable(_) => {
+                return false;
+            }
+            Value::ObjInstance(_) => {
                 return false;
             }
         }
@@ -75,7 +94,7 @@ impl Value {
 
     pub fn check_num(&self, cursor: Cursor) -> Result<f64, RuntimeEvent> {
         if let Value::Num(num) = self {
-            return Ok(*num);
+            return Ok(num.0);
         }
         Err(RuntimeEvent::error(
             format!("expected Num, found {:?}", self),

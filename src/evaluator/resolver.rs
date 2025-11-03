@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{clone, collections::HashMap};
 
 use crate::{
-    lexer::cursor::Cursor,
+    lexer::{cursor::Cursor, token::KeywordKind},
     parser::{
         expr::{Expr, ExprKind},
         stmt::{Stmt, StmtKind},
@@ -138,6 +138,7 @@ impl<'a> Resolver<'a> {
             StmtKind::If { .. } => self.resolve_stmt_if(stmt),
             StmtKind::While { .. } => self.resolve_stmt_while(stmt),
             StmtKind::Fn { .. } => self.resolve_stmt_fn(stmt),
+            StmtKind::Obj { .. } => self.resolve_stmt_obj(stmt),
         }
     }
 
@@ -226,7 +227,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_stmt_fn(&mut self, stmt: &Stmt) -> ResolveResult {
-        if let StmtKind::Fn { name, params, body } = &stmt.kind {
+        if let StmtKind::Fn { name, params, body, .. } = &stmt.kind {
             // Function name is bound in the enclosing scope.
             self.declare(name.clone(), stmt.cursor);
             self.define(name.clone(), stmt.cursor);
@@ -244,18 +245,55 @@ impl<'a> Resolver<'a> {
         unreachable!("Non-fn statement passed to Resolver::resolve_stmt_fn");
     }
 
+    fn resolve_stmt_obj(&mut self, stmt: &Stmt) -> ResolveResult {
+        if let StmtKind::Obj { name, methods } = &stmt.kind {
+            self.declare(name.clone(), stmt.cursor);
+            self.define(name.clone(), stmt.cursor);
+
+            self.begin_scope();
+
+            for method in methods {
+                if let StmtKind::Fn { name, params, body, bound } = &method.kind {
+                    if *bound {
+                        self.scopes.last_mut().unwrap().insert(
+                            KeywordKind::KSelf.to_string(),
+                            ScopedVar::defined(stmt.cursor),
+                        );
+                    }
+                }
+                self.resolve_stmt_fn(method)?;
+            }
+
+            self.end_scope();
+
+            return Ok(());
+        }
+        unreachable!("Non-obj statement passed to Resolver::resolve_stmt_obj");
+    }
+
     // Expression functions
 
-    #[rustfmt::skip]
     fn resolve_expr(&mut self, expr: &Expr) -> ResolveResult {
         match &expr.kind {
-            ExprKind::Binary { left, right, .. } => { self.resolve_expr(left)?; self.resolve_expr(right)?; Ok(()) }
-            ExprKind::Grouping { expr: inner }   => { self.resolve_expr(inner)?; Ok(()) }
-            ExprKind::Unary { right, .. } => { self.resolve_expr(right)?; Ok(()) }
+            ExprKind::Binary { left, right, .. } => {
+                self.resolve_expr(left)?;
+                self.resolve_expr(right)?;
+                Ok(())
+            }
+            ExprKind::Grouping { expr: inner } => {
+                self.resolve_expr(inner)?;
+                Ok(())
+            }
+            ExprKind::Unary { right, .. } => {
+                self.resolve_expr(right)?;
+                Ok(())
+            }
             ExprKind::Literal(_) => Ok(()),
             ExprKind::Call { callee, args } => {
                 self.resolve_expr(callee)?;
-                for a in args { self.resolve_expr(a)?; }
+                for a in args {
+                    self.resolve_expr(a)?;
+                }
                 Ok(())
             }
             ExprKind::Var(name) => self.resolve_expr_var(expr, name),
@@ -267,6 +305,19 @@ impl<'a> Resolver<'a> {
             ExprKind::Logical { left, right, .. } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
+                Ok(())
+            }
+            ExprKind::Get { obj, .. } => {
+                self.resolve_expr(obj)?;
+                Ok(())
+            }
+            ExprKind::Set { obj, val, .. } => {
+                self.resolve_expr(obj)?;
+                self.resolve_expr(val)?;
+                Ok(())
+            }
+            ExprKind::ESelf => {
+                self.resolve_local(expr, KeywordKind::KSelf.to_string().as_str());
                 Ok(())
             }
         }
