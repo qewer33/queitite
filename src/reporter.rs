@@ -31,6 +31,8 @@ impl Reporter {
         expected: Option<String>,
         found: Option<String>,
     ) {
+        let _ = crossterm::terminal::disable_raw_mode();
+        
         println!("{}: {}", rtype, msg.bold());
         println!(
             "{}{}:{}:{}:",

@@ -223,6 +223,14 @@ impl ValuePrototypes {
             }
         );
 
+        // len() -> Str: returns the length of the string
+        proto_method!(proto, StrLen, "len", 0, |_evaluator, args, recv| {
+            if let Value::Str(str) = recv {
+                return Ok(Value::Num(OrderedFloat(str.borrow().len() as f64)));
+            }
+            unreachable!()
+        });
+
         // Foreground colors
         str_color_method!(proto, StrBlack, "black", black);
         str_color_method!(proto, StrRed, "red", red);
@@ -273,10 +281,53 @@ impl ValuePrototypes {
             Ok(Value::Str(Rc::new(RefCell::new(recv.get_type()))))
         });
 
+        // abs() -> Num: returns absolute value of number
+        proto_method!(proto, NumAbs, "abs", 0, |_evaluator, args, recv| {
+            if let Value::Num(num) = recv {
+                return Ok(Value::Num(OrderedFloat(num.abs())));
+            }
+            unreachable!()
+        });
+
         // round() -> Num: returns the number rounded to the nearest integer
         proto_method!(proto, NumRound, "round", 0, |_evaluator, args, recv| {
             if let Value::Num(num) = recv {
                 return Ok(Value::Num(OrderedFloat(num.round())));
+            }
+            unreachable!()
+        });
+
+        // ceil() -> Num: returns the number rounded to the smallest larger integer
+        proto_method!(proto, NumCeil, "ceil", 0, |_evaluator, args, recv| {
+            if let Value::Num(num) = recv {
+                return Ok(Value::Num(OrderedFloat(num.ceil())));
+            }
+            unreachable!()
+        });
+
+        // floor() -> Num: returns the number rounded to the largest smaller integer
+        proto_method!(proto, NumFloor, "floor", 0, |_evaluator, args, recv| {
+            if let Value::Num(num) = recv {
+                return Ok(Value::Num(OrderedFloat(num.floor())));
+            }
+            unreachable!()
+        });
+
+        // clamp(min, max) -> Num: returns the number clamped between min and max
+        proto_method!(proto, NumClamp, "clamp", 2, |_evaluator, args, recv| {
+            if let Value::Num(num) = recv {
+                let min = if let Value::Num(n) = args[1] {
+                    n.0
+                } else {
+                    return Ok(Value::Null);
+                };
+                let max = if let Value::Num(n) = args[2] {
+                    n.0 
+                } else {
+                    return Ok(Value::Null);
+                };
+
+                return Ok(Value::Num(OrderedFloat(num.0.clamp(min, max))));
             }
             unreachable!()
         });

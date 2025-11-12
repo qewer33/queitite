@@ -1,0 +1,92 @@
+obj Item do
+    init(index) do
+        self.index = index
+        self.focused = false
+        self.input = Tui.create_text_input(1, 3+index*3, Term.size()[0]-2, "What to do?")
+        self.input.set_style("black", Null, "black")
+    end
+
+    render(self) do
+        if self.focused do
+            self.input.set_style("white", "black", "white")
+        else do
+            self.input.set_style("black", Null, "black")
+        end
+        self.input.render()
+    end
+end
+
+obj App do
+    init() do
+        self.running = true
+        self.items = [
+            Item(0)
+        ]
+        self.items[0].focused = true
+        self.focused_item = 0
+    end
+
+    run(self) do
+        while self.running do
+            self.render()
+            self.handle_input()
+        end
+    end
+
+    render(self) do
+        Tui.clear()
+
+        Tui.draw_block(0, 0, Term.size()[0], Term.size()[1], "To-Do App", "black")
+        var toolbar = "[Tab/Shift+Tab] Switch Item [Ctrl+A] New Item [Esc] Exit"
+        Tui.draw_text(1, 1, toolbar.len(), 1, toolbar, "black", Null)
+
+        for item in self.items do
+            item.render()
+        end
+
+        Tui.render()
+    end
+
+    handle_input(self) do
+        var input = Term.get_input()
+        if input do
+            var key = input.key()
+
+            if key == "Esc" do
+                self.running = false
+            end
+
+            if key == "a" and input.ctrl() do
+                self.add_item()
+            else if key == "Tab" do
+                self.items[self.focused_item].focused = false
+
+                if input.shift() do
+                    if self.focused_item > 1 do
+                        self.focused_item--
+                    end
+                else do
+                    if self.focused_item < self.items.len()-1 do
+                        self.focused_item++
+                    end
+                end
+
+                self.items[self.focused_item].focused = true
+            else do
+                for item, i in self.items do
+                    if item.focused do
+                        self.items[i].input.handle_key(key)
+                    end
+                end
+            end
+        end
+    end
+
+    add_item(self) do
+        self.items.push(Item(self.items.len()))
+    end
+end
+
+Tui.init()
+App().run()
+Tui.cleanup()

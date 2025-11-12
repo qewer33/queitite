@@ -159,14 +159,20 @@ impl Instance {
         }
     }
 
-    pub fn get(&self, name: String, cursor: Cursor) -> EvalResult<Value> {
-        if let Some(val) = self.fields.get(&name) {
+    pub fn get_rc(
+        inst_rc: Rc<RefCell<Instance>>,
+        name: String,
+        cursor: Cursor,
+    ) -> EvalResult<Value> {
+        let inst_ref = inst_rc.borrow();
+
+        if let Some(val) = inst_ref.fields.get(&name) {
             return Ok(val.clone());
         }
 
-        if let Some(method) = self.obj.find_method(name.clone()) {
-            let bound_method = method.bind(Value::ObjInstance(Rc::new(RefCell::new(self.clone()))));
-            return Ok(Value::Callable(bound_method.get_callable()));
+        if let Some(method) = inst_ref.obj.find_method(name.clone()) {
+            let bound = method.bind(Value::ObjInstance(inst_rc.clone()));
+            return Ok(Value::Callable(bound.get_callable()));
         }
 
         Err(RuntimeEvent::error(
