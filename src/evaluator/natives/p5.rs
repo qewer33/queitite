@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     rc::Rc,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -10,6 +10,8 @@ use std::{
 use once_cell::sync::Lazy;
 use pixels::{Pixels, SurfaceTexture};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
+#[cfg(not(target_os = "linux"))]
+use winit::event_loop::EventLoop;
 #[cfg(target_os = "linux")]
 use winit::platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11};
 use winit::{
@@ -18,14 +20,12 @@ use winit::{
     event_loop::{ControlFlow, EventLoopBuilder},
     window::WindowBuilder,
 };
-#[cfg(not(target_os = "linux"))]
-use winit::event_loop::EventLoop;
 
 use crate::{
     evaluator::{
         Callable, Evaluator,
         object::{Method, NativeMethod, Object},
-        runtime_err::{EvalResult, RuntimeEvent},
+        runtime_err::{ErrKind, EvalResult, RuntimeEvent},
         value::Value,
     },
     lexer::cursor::Cursor,
@@ -244,7 +244,13 @@ impl P5State {
                 if let Some(path) = PathBuilder::from_oval(rect) {
                     let mut paint = Paint::default();
                     paint.set_color(color);
-                    pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                    pixmap.fill_path(
+                        &path,
+                        &paint,
+                        FillRule::Winding,
+                        Transform::identity(),
+                        None,
+                    );
                 }
             }
             if let Some(color) = stroke {
@@ -307,15 +313,25 @@ fn ensure_runtime(cursor: Cursor) -> EvalResult<P5Runtime> {
     if let Some(handles) = current_runtime() {
         return Ok(handles);
     }
-    let handles = start_window_thread(DEFAULT_WIDTH, DEFAULT_HEIGHT)
-        .map_err(|msg| RuntimeEvent::error(format!("failed to create P5 window: {msg}"), cursor))?;
+    let handles = start_window_thread(DEFAULT_WIDTH, DEFAULT_HEIGHT).map_err(|msg| {
+        RuntimeEvent::error(
+            ErrKind::Native,
+            format!("failed to create P5 window: {msg}"),
+            cursor,
+        )
+    })?;
     set_runtime(handles.clone());
     Ok(handles)
 }
 
 fn get_runtime(cursor: Cursor) -> EvalResult<P5Runtime> {
-    current_runtime()
-        .ok_or_else(|| RuntimeEvent::error("call P5.run() before using P5 methods".into(), cursor))
+    current_runtime().ok_or_else(|| {
+        RuntimeEvent::error(
+            ErrKind::Value,
+            "call P5.run() before using P5 methods".into(),
+            cursor,
+        )
+    })
 }
 
 fn start_window_thread(width: usize, height: usize) -> Result<P5Runtime, String> {
@@ -459,12 +475,14 @@ fn render_frame(pixels: &mut Pixels, state: &SharedState) -> bool {
 fn convert_len(value: f64, name: &str, cursor: Cursor) -> EvalResult<usize> {
     if value <= 0.0 {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             format!("{name} must be greater than zero"),
             cursor,
         ));
     }
     if (value.fract()).abs() > f64::EPSILON {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             format!("{name} must be an integer"),
             cursor,
         ));
@@ -498,6 +516,7 @@ fn lookup_env_callable(
     match result {
         Ok(Value::Callable(cb)) => Ok(Some(cb)),
         Ok(_) => Err(RuntimeEvent::error(
+            ErrKind::Type,
             format!("function '{name}' must be callable"),
             cursor,
         )),
@@ -510,6 +529,7 @@ fn ensure_callable(value: &Value, cursor: Cursor, label: &str) -> EvalResult<Rc<
         Ok(Rc::clone(cb))
     } else {
         Err(RuntimeEvent::error(
+            ErrKind::Type,
             format!("{label} must be a function"),
             cursor,
         ))
@@ -532,6 +552,7 @@ native_fn!(FnP5Rect, "p5_rect", 4, |_evaluator, args, cursor| {
         let mut lock = state.lock().unwrap();
         if !lock.open {
             return Err(RuntimeEvent::error(
+                ErrKind::Value,
                 "P5 window is closed; call P5.run() first".into(),
                 cursor,
             ));
@@ -606,19 +627,24 @@ native_fn!(FnP5Line, "p5_line", 4, |_evaluator, args, cursor| {
     Ok(Value::Null)
 });
 
-native_fn!(FnP5Background, "p5_background", 3, |_evaluator, args, cursor| {
-    let r = args[0].check_num(cursor, Some("red".into()))?;
-    let g = args[1].check_num(cursor, Some("green".into()))?;
-    let b = args[2].check_num(cursor, Some("blue".into()))?;
-    let color = color_from_rgb(r, g, b);
-    let runtime = get_runtime(cursor)?;
-    {
-        let state = runtime.state();
-        let mut lock = state.lock().unwrap();
-        lock.background(color);
+native_fn!(
+    FnP5Background,
+    "p5_background",
+    3,
+    |_evaluator, args, cursor| {
+        let r = args[0].check_num(cursor, Some("red".into()))?;
+        let g = args[1].check_num(cursor, Some("green".into()))?;
+        let b = args[2].check_num(cursor, Some("blue".into()))?;
+        let color = color_from_rgb(r, g, b);
+        let runtime = get_runtime(cursor)?;
+        {
+            let state = runtime.state();
+            let mut lock = state.lock().unwrap();
+            lock.background(color);
+        }
+        Ok(Value::Null)
     }
-    Ok(Value::Null)
-});
+);
 
 native_fn!(FnP5Fill, "p5_fill", 3, |_evaluator, args, cursor| {
     let r = args[0].check_num(cursor, Some("red".into()))?;
@@ -655,30 +681,41 @@ native_fn!(FnP5NoFill, "p5_no_fill", 0, |_evaluator, _args, cursor| {
     Ok(Value::Null)
 });
 
-native_fn!(FnP5NoStroke, "p5_no_stroke", 0, |_evaluator, _args, cursor| {
-    let runtime = get_runtime(cursor)?;
-    {
-        let state = runtime.state();
-        state.lock().unwrap().stroke_color = None;
+native_fn!(
+    FnP5NoStroke,
+    "p5_no_stroke",
+    0,
+    |_evaluator, _args, cursor| {
+        let runtime = get_runtime(cursor)?;
+        {
+            let state = runtime.state();
+            state.lock().unwrap().stroke_color = None;
+        }
+        Ok(Value::Null)
     }
-    Ok(Value::Null)
-});
+);
 
-native_fn!(FnP5StrokeWeight, "p5_stroke_weight", 1, |_evaluator, args, cursor| {
-    let weight = args[0].check_num(cursor, Some("weight".into()))?;
-    if weight <= 0.0 {
-        return Err(RuntimeEvent::error(
-            "stroke weight must be positive".into(),
-            cursor,
-        ));
+native_fn!(
+    FnP5StrokeWeight,
+    "p5_stroke_weight",
+    1,
+    |_evaluator, args, cursor| {
+        let weight = args[0].check_num(cursor, Some("weight".into()))?;
+        if weight <= 0.0 {
+            return Err(RuntimeEvent::error(
+                ErrKind::Value,
+                "stroke weight must be positive".into(),
+                cursor,
+            ));
+        }
+        let runtime = get_runtime(cursor)?;
+        {
+            let state = runtime.state();
+            state.lock().unwrap().stroke_weight = weight.max(0.1) as f32;
+        }
+        Ok(Value::Null)
     }
-    let runtime = get_runtime(cursor)?;
-    {
-        let state = runtime.state();
-        state.lock().unwrap().stroke_weight = weight.max(0.1) as f32;
-    }
-    Ok(Value::Null)
-});
+);
 
 native_fn!(FnP5Size, "p5_size", 2, |_evaluator, args, cursor| {
     let width = convert_len(

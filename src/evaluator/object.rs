@@ -4,7 +4,7 @@ use crate::{
     evaluator::{
         env::Env,
         function::Function,
-        runtime_err::{EvalResult, RuntimeEvent},
+        runtime_err::{ErrKind, EvalResult, RuntimeEvent},
         value::{Callable, Value},
     },
     lexer::cursor::Cursor,
@@ -178,6 +178,7 @@ impl Instance {
         }
 
         Err(RuntimeEvent::error(
+            ErrKind::Name,
             format!("undefined property '{}'", name),
             cursor,
         ))

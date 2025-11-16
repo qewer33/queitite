@@ -1,23 +1,16 @@
-var x = 0
-var y = 0
-
-fn setup() do
-    P5.size(640, 640)
+fn test(n) do
+    if !n.type_of("Num") do
+        throw err("TypeErr", "n should be Num")
+    end
+    println(n)
 end
 
-fn draw() do
-    P5.background(255, 255, 255)
+test("10")
 
-    x++
-    y++
-
-    P5.fill(255, 0, 0)
-    P5.stroke(0, 255, 0)
-    P5.stroke_weight(1)
-    P5.rect(x, y, 100, 100)
-
-    P5.stroke_weight(5)
-    P5.line(0, 0, 200, 400)
+try do
+    test("skjdfk")
+catch e, v do
+    println("amogus")
+    println(e)
+    println(v)
 end
-
-P5.run()

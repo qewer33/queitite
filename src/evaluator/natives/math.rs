@@ -8,12 +8,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{
     evaluator::{
-        runtime_err::RuntimeEvent,
-        Callable,
-        EvalResult,
-        Evaluator,
-        object::{Method, NativeMethod, Object},
-        value::Value,
+        Callable, EvalResult, Evaluator, object::{Method, NativeMethod, Object}, runtime_err::{ErrKind, RuntimeEvent}, value::Value
     },
     native_fn,
 };
@@ -165,6 +160,7 @@ native_fn!(FnMathLn, "ln", 1, |_evaluator, args, cursor| {
     let x = args[0].check_num(cursor, Some("argument".into()))?;
     if x <= 0.0 {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "Math.ln expects argument > 0".into(),
             cursor,
         ));
@@ -177,6 +173,7 @@ native_fn!(FnMathLog10, "log10", 1, |_evaluator, args, cursor| {
     let x = args[0].check_num(cursor, Some("argument".into()))?;
     if x <= 0.0 {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "Math.log10 expects argument > 0".into(),
             cursor,
         ));
@@ -190,12 +187,14 @@ native_fn!(FnMathLog, "log", 2, |_evaluator, args, cursor| {
     let base = args[1].check_num(cursor, Some("base".into()))?;
     if value <= 0.0 {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "Math.log expects value > 0".into(),
             cursor,
         ));
     }
     if base <= 0.0 || (base - 1.0).abs() < f64::EPSILON {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "Math.log expects base > 0 and != 1".into(),
             cursor,
         ));

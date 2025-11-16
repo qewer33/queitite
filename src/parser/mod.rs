@@ -229,6 +229,9 @@ impl<'a> Parser<'a> {
     }
 
     fn stmt(&mut self) -> ParseResult<Stmt> {
+        if self.match_keyword(KeywordKind::Throw) {
+            return self.err_stmt();
+        }
         if self.match_keyword(KeywordKind::Return) {
             return self.return_stmt();
         }
@@ -249,6 +252,9 @@ impl<'a> Parser<'a> {
         }
         if self.match_keyword(KeywordKind::For) {
             return self.for_stmt();
+        }
+        if self.match_keyword(KeywordKind::Try) {
+            return self.try_stmt();
         }
 
         self.expr_stmt()
@@ -314,13 +320,15 @@ impl<'a> Parser<'a> {
         let body = self.block_stmt()?;
 
         let cursor = iter.cursor.clone();
-        Ok(
-            Stmt::new(
-                StmtKind::For { item, index, iter, body: Box::new(body) },
-                cursor
-            )
-        )
-        
+        Ok(Stmt::new(
+            StmtKind::For {
+                item,
+                index,
+                iter,
+                body: Box::new(body),
+            },
+            cursor,
+        ))
     }
 
     fn while_stmt(&mut self, declr: Option<Box<Stmt>>) -> ParseResult<Stmt> {
@@ -341,6 +349,59 @@ impl<'a> Parser<'a> {
             },
             self.previous().cursor,
         ))
+    }
+
+    fn try_stmt(&mut self) -> ParseResult<Stmt> {
+        let body = Box::new(self.stmt()?);
+        self.consume_keyword(
+            KeywordKind::Catch,
+            "expected 'catch' arm after 'try' block".into(),
+        )?;
+
+        let mut err_kind: Option<String> = None;
+        let mut err_val: Option<String> = None;
+        if self.match_tokens(vec![TokenKindDiscriminants::Identifier]) {
+            let kind_ident = self.previous();
+            err_kind = if let TokenKind::Identifier(name) = kind_ident.kind {
+                Some(name)
+            } else {
+                unreachable!()
+            };
+
+            if self.match_tokens(vec![TokenKindDiscriminants::Comma]) {
+                let val_ident = self.consume(
+                    TokenKindDiscriminants::Identifier,
+                    "expected error value identifier after ','",
+                )?;
+                err_val = if let TokenKind::Identifier(name) = val_ident.kind {
+                    Some(name)
+                } else {
+                    unreachable!()
+                };
+            }
+        }
+
+        let catch = Box::new(self.stmt()?);
+
+        Ok(Stmt::new(
+            StmtKind::Try {
+                body,
+                err_kind,
+                err_val,
+                catch,
+            },
+            self.previous().cursor,
+        ))
+    }
+
+    fn err_stmt(&mut self) -> ParseResult<Stmt> {
+        let cursor = self.current().cursor.clone();
+        let val = self.expr()?;
+        self.consume(
+            TokenKindDiscriminants::EOL,
+            "expected '\\n' after error value",
+        )?;
+        Ok(Stmt::new(StmtKind::Err(val), cursor))
     }
 
     fn return_stmt(&mut self) -> ParseResult<Stmt> {
@@ -374,14 +435,14 @@ impl<'a> Parser<'a> {
 
         while !self.check_keyword(KeywordKind::End)
             && !self.check_keyword(KeywordKind::Else)
+            && !self.check_keyword(KeywordKind::Catch)
             && !self.is_at_end()
         {
             statements.push(self.declr()?);
-
             self.skip_eols();
         }
 
-        if !self.check_keyword(KeywordKind::Else) {
+        if !self.check_keyword(KeywordKind::Else) && !self.check_keyword(KeywordKind::Catch) {
             self.consume_keyword(KeywordKind::End, "Expected closing \"end\" after block")?;
         }
         Ok(Stmt::new(

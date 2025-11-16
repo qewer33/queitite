@@ -11,7 +11,7 @@ use crate::{
         Evaluator,
         object::{Instance, Object},
         prototype::{Prototype, ValuePrototypes},
-        runtime_err::{EvalResult, RuntimeErr, RuntimeEvent},
+        runtime_err::{ErrKind, EvalResult, RuntimeErr, RuntimeEvent},
     },
     lexer::cursor::Cursor,
 };
@@ -78,6 +78,7 @@ impl Value {
             return Ok(true);
         }
         Err(RuntimeEvent::Err(RuntimeErr::new(
+            ErrKind::Type,
             format!(
                 "expected value of type {}, found {}",
                 expected,
@@ -87,11 +88,7 @@ impl Value {
         )))
     }
 
-    pub fn check_num(
-        &self,
-        cursor: Cursor,
-        name: Option<String>,
-    ) -> EvalResult<f64> {
+    pub fn check_num(&self, cursor: Cursor, name: Option<String>) -> EvalResult<f64> {
         if let Value::Num(f) = self {
             return Ok(f.0);
         }
@@ -100,6 +97,7 @@ impl Value {
             None => "value".to_string(),
         };
         Err(RuntimeEvent::Err(RuntimeErr::new(
+            ErrKind::Type,
             format!("expected {} of type Num, found {}", val, self.get_type()),
             cursor,
         )))
@@ -118,16 +116,13 @@ impl Value {
             None => "value".to_string(),
         };
         Err(RuntimeEvent::Err(RuntimeErr::new(
+            ErrKind::Type,
             format!("expected {} of type Str, found {}", val, self.get_type()),
             cursor,
         )))
     }
 
-    pub fn check_bool(
-        &self,
-        cursor: Cursor,
-        name: Option<String>,
-    ) -> EvalResult<bool> {
+    pub fn check_bool(&self, cursor: Cursor, name: Option<String>) -> EvalResult<bool> {
         if let Value::Bool(val) = self {
             return Ok(*val);
         }
@@ -136,6 +131,7 @@ impl Value {
             None => "value".to_string(),
         };
         Err(RuntimeEvent::Err(RuntimeErr::new(
+            ErrKind::Type,
             format!("expected {} of type Bool, found {}", val, self.get_type()),
             cursor,
         )))
@@ -154,6 +150,7 @@ impl Value {
             None => "value".to_string(),
         };
         Err(RuntimeEvent::Err(RuntimeErr::new(
+            ErrKind::Type,
             format!("expected {} of type List, found {}", val, self.get_type()),
             cursor,
         )))
@@ -226,7 +223,8 @@ impl Value {
                     Ok(Value::Num(OrderedFloat(n.0 + m.0)))
                 } else {
                     Err(RuntimeEvent::error(
-                        "cannot add-asssign non-number to number".into(),
+                        ErrKind::Type,
+                        "cannot add-asssign non-Num to Num".into(),
                         cursor,
                     ))
                 }
@@ -248,6 +246,7 @@ impl Value {
 
             // you might want to support ObjInstance here, etc.
             _ => Err(RuntimeEvent::error(
+                ErrKind::Type,
                 "invalid left-hand side for '+='".into(),
                 cursor,
             )),
@@ -262,7 +261,8 @@ impl Value {
                     Ok(Value::Num(OrderedFloat(n.0 - m.0)))
                 } else {
                     Err(RuntimeEvent::error(
-                        "cannot sub-assign non-number from number".into(),
+                        ErrKind::Type,
+                        "cannot sub-assign non-Num from Num".into(),
                         cursor,
                     ))
                 }
@@ -271,6 +271,7 @@ impl Value {
             // TODO: list -= ???
             // TODO: string -= ???
             _ => Err(RuntimeEvent::error(
+                ErrKind::Type,
                 "invalid left-hand side for '-='".into(),
                 cursor,
             )),

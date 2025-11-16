@@ -25,6 +25,7 @@ pub struct Reporter;
 impl Reporter {
     pub fn report_at(
         rtype: ReportType,
+        etype: Option<String>,
         msg: &str,
         src: &Src,
         cursor: Cursor,
@@ -32,8 +33,12 @@ impl Reporter {
         found: Option<String>,
     ) {
         let _ = crossterm::terminal::disable_raw_mode();
-        
-        println!("{}: {}", rtype, msg.bold());
+
+        let etype_str = match etype {
+            Some(s) => format!("({}) ", s),
+            None => "".into(),
+        };
+        println!("{}: {}{}", rtype, etype_str.red().bold(), msg.bold());
         println!(
             "{}{}:{}:{}:",
             "--> ".blue(),
@@ -57,7 +62,7 @@ impl Reporter {
             "|".blue(),
             src.lines[line]
         );
-        print!("   {}{}", " ".repeat(cursor.col), "^ here: ".yellow());
+        print!(" {}{}", " ".repeat(cursor.col), "^ here: ".yellow());
         if let Some(estr) = expected {
             print!("expected '{}'", estr);
             if let Some(fstr) = found {
@@ -79,20 +84,21 @@ impl Reporter {
     }
 
     pub fn info_at(msg: &str, src: &Src, cursor: Cursor) {
-        Reporter::report_at(ReportType::Info, msg, src, cursor, None, None);
+        Reporter::report_at(ReportType::Info, None, msg, src, cursor, None, None);
     }
 
     pub fn warning_at(msg: &str, src: &Src, cursor: Cursor) {
-        Reporter::report_at(ReportType::Warning, msg, src, cursor, None, None);
+        Reporter::report_at(ReportType::Warning, None, msg, src, cursor, None, None);
     }
 
-    pub fn error_at(msg: &str, src: &Src, cursor: Cursor) {
-        Reporter::report_at(ReportType::Error, msg, src, cursor, None, None);
+    pub fn error_at(msg: &str, etype: String, src: &Src, cursor: Cursor) {
+        Reporter::report_at(ReportType::Error, Some(etype), msg, src, cursor, None, None);
     }
 
     pub fn parse_err_at(err: &ParseErr, src: &Src) {
         Reporter::report_at(
             ReportType::Error,
+            Some("ParseErr".into()),
             err.msg.as_str(),
             src,
             err.cursor,

@@ -30,8 +30,10 @@ exprStmt       → expression EOL ;
 ifStmt         → "if" expression statement
                ( "else" statement )? ;
 returnStmt     → "return" expression EOL ;
+errStmt        → "err" expression EOL ;
 breakStmt      → "break" EOL ; 
 continueStmt   → "continue" EOL ; 
+tryStmt        → "try" statement "catch" IDENTIFIER statement ;
 forStmt        → "for" IDENTIFIER ( "," IDENTIFIER )? "in" expression "do" statement ;
 whileStmt      → varDeclrHeader? "while" expression ("step" assignment)? statement ;
 block          → "do" declaration "end" ;

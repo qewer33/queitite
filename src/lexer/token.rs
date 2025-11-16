@@ -126,7 +126,9 @@ pub enum KeywordKind {
     In,
     Fn,
     Obj,
-    Err,
+    Throw,
+    Try,
+    Catch,
 }
 
 impl ToString for KeywordKind {
@@ -150,7 +152,9 @@ impl ToString for KeywordKind {
             KeywordKind::In => "in",
             KeywordKind::Fn => "fn",
             KeywordKind::Obj => "obj",
-            KeywordKind::Err => "err",
+            KeywordKind::Throw => "throw",
+            KeywordKind::Try => "try",
+            KeywordKind::Catch => "catch",
         }
         .into()
     }
@@ -179,7 +183,9 @@ impl FromStr for KeywordKind {
             "in" => Ok(KeywordKind::In),
             "fn" => Ok(KeywordKind::Fn),
             "obj" => Ok(KeywordKind::Obj),
-            "err" => Ok(KeywordKind::Err),
+            "throw" => Ok(KeywordKind::Throw),
+            "try" => Ok(KeywordKind::Try),
+            "catch" => Ok(KeywordKind::Catch),
 
             _ => Err(()),
         }

@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 
 use crate::{
     evaluator::{
-        runtime_err::{EvalResult, RuntimeEvent},
+        runtime_err::{ErrKind, EvalResult, RuntimeEvent},
         value::Value,
     },
     lexer::cursor::Cursor,
@@ -46,6 +46,7 @@ impl Env {
             return parent.borrow_mut().assign(name, val, cursor);
         }
         Err(RuntimeEvent::error(
+            ErrKind::Name,
             format!("undefined variable '{}'", name),
             cursor,
         ))
@@ -59,6 +60,7 @@ impl Env {
             return parent.borrow().get(name, cursor);
         }
         Err(RuntimeEvent::error(
+            ErrKind::Name,
             format!("undefined variable '{}'", name),
             cursor,
         ))
@@ -72,12 +74,13 @@ impl Env {
 
     pub fn get_at(env_ptr: &EnvPtr, name: &str, dist: usize, cursor: Cursor) -> EvalResult<Value> {
         let ancestor = Self::ancestor(env_ptr.clone(), dist);
-        ancestor
-            .borrow()
-            .values
-            .get(name)
-            .cloned()
-            .ok_or_else(|| RuntimeEvent::error(format!("undefined variable '{}'", name), cursor))
+        ancestor.borrow().values.get(name).cloned().ok_or_else(|| {
+            RuntimeEvent::error(
+                ErrKind::Name,
+                format!("undefined variable '{}'", name),
+                cursor,
+            )
+        })
     }
 
     pub fn ancestor(env_ptr: EnvPtr, dist: usize) -> EnvPtr {

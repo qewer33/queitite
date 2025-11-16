@@ -18,7 +18,7 @@ use crate::{
         natives::Natives,
         object::{Instance, Method, Object},
         prototype::{BoundMethod, ValuePrototypes},
-        runtime_err::{EvalResult, RuntimeErr, RuntimeEvent},
+        runtime_err::{ErrKind, EvalResult, RuntimeErr, RuntimeEvent},
         value::{Callable, Value},
     },
     lexer::token::KeywordKind,
@@ -58,8 +58,13 @@ impl<'a> Evaluator<'a> {
             match self.eval_stmt(stmt) {
                 Ok(_) => {}
                 Err(err) => {
-                    if let RuntimeEvent::Err(RuntimeErr { msg, cursor, .. }) = err {
-                        Reporter::error_at(&msg, self.src, cursor);
+                    if let RuntimeEvent::Err(RuntimeErr { kind, msg, cursor, .. }) = err {
+                        Reporter::error_at(&msg, kind.to_string(), self.src, cursor);
+                        return;
+                    }
+                    if let RuntimeEvent::UserErr { val, cursor } = err {
+                        let msg = format!("user error: {}", val);
+                        Reporter::error_at(msg.as_str(), "UserErr".into(), self.src, cursor);
                         return;
                     }
                 }
@@ -72,6 +77,7 @@ impl<'a> Evaluator<'a> {
     fn eval_stmt(&mut self, stmt: &Stmt) -> EvalResult<()> {
         match &stmt.kind {
             StmtKind::Expr(_) => self.eval_stmt_expr(stmt),
+            StmtKind::Err(_) => self.eval_stmt_err(stmt),
             StmtKind::Return(_) => self.eval_stmt_return(stmt),
             StmtKind::Break => self.eval_stmt_break(stmt),
             StmtKind::Continue => self.eval_stmt_continue(stmt),
@@ -80,9 +86,18 @@ impl<'a> Evaluator<'a> {
             StmtKind::If { .. } => self.eval_stmt_if(stmt),
             StmtKind::For { .. } => self.eval_stmt_for(stmt),
             StmtKind::While { .. } => self.eval_stmt_while(stmt),
+            StmtKind::Try { .. } => self.eval_stmt_try(stmt),
             StmtKind::Fn { .. } => self.eval_stmt_fn(stmt),
             StmtKind::Obj { .. } => self.eval_stmt_obj(stmt),
         }
+    }
+
+    fn eval_stmt_err(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Err(expr) = &stmt.kind {
+            let val = self.eval_expr(expr)?;
+            return Err(RuntimeEvent::user_err(val, stmt.cursor));
+        }
+        unreachable!("Non-err statement passed to Evaluator::eval_stmt_err");
     }
 
     fn eval_stmt_return(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -184,6 +199,7 @@ impl<'a> Evaluator<'a> {
                 }
                 _ => {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Type,
                         "only List and Str values are iterable".into(),
                         stmt.cursor,
                     ));
@@ -228,6 +244,55 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
         unreachable!("Non-while statement passed to Evaluator::eval_stmt_while");
+    }
+
+    fn eval_stmt_try(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Try {
+            body,
+            err_kind,
+            err_val,
+            catch,
+        } = &stmt.kind
+        {
+            match self.eval_stmt(body) {
+                Err(e) => match e {
+                    RuntimeEvent::UserErr { val, .. } => {
+                        let catch_env = Env::enclosed(self.env.clone());
+                        if let Some(kind) = err_kind {
+                            catch_env.borrow_mut().define(
+                                kind.clone(),
+                                Value::Str(Rc::new(RefCell::new("UserErr".into()))),
+                            );
+                        }
+                        if let Some(eval) = err_val {
+                            catch_env.borrow_mut().define(eval.clone(), val);
+                        }
+
+                        self.eval_stmt_block(catch, catch_env)?;
+                    }
+                    RuntimeEvent::Err(err) => {
+                        let catch_env = Env::enclosed(self.env.clone());
+                        if let Some(kind) = err_kind {
+                            catch_env.borrow_mut().define(
+                                kind.clone(),
+                                Value::Str(Rc::new(RefCell::new("RuntimeErr".into()))),
+                            );
+                        }
+                        if let Some(eval) = err_val {
+                            catch_env
+                                .borrow_mut()
+                                .define(eval.clone(), Value::Str(Rc::new(RefCell::new(err.msg))));
+                        }
+
+                        self.eval_stmt_block(catch, catch_env)?;
+                    }
+                    _ => return Err(e),
+                },
+                _ => {}
+            }
+            return Ok(());
+        }
+        unreachable!("Non-try statement passed to Evaluator::eval_stmt_try");
     }
 
     fn eval_stmt_expr(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -420,6 +485,7 @@ impl<'a> Evaluator<'a> {
                 nstart = n.0;
             } else {
                 return Err(RuntimeEvent::error(
+                    ErrKind::Type,
                     "range start must be a Num".into(),
                     expr.cursor,
                 ));
@@ -431,6 +497,7 @@ impl<'a> Evaluator<'a> {
                 nend = n.0;
             } else {
                 return Err(RuntimeEvent::error(
+                    ErrKind::Type,
                     "range end must be a Num".into(),
                     expr.cursor,
                 ));
@@ -443,6 +510,7 @@ impl<'a> Evaluator<'a> {
                     nstep = n.0;
                 } else {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Type,
                         "range step must be a Num".into(),
                         expr.cursor,
                     ));
@@ -477,6 +545,7 @@ impl<'a> Evaluator<'a> {
                 Value::Num(n) => n.0 as usize,
                 _ => {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Type,
                         "list index must be a Num".into(),
                         index.cursor,
                     ));
@@ -488,11 +557,8 @@ impl<'a> Evaluator<'a> {
                     let items = rc_items.borrow();
                     if idx >= items.len() {
                         return Err(RuntimeEvent::error(
-                            format!(
-                                "list index {} out of bounds (len = {})",
-                                idx,
-                                items.len()
-                            ),
+                            ErrKind::Value,
+                            format!("list index {} out of bounds (len = {})", idx, items.len()),
                             expr.cursor,
                         ));
                     }
@@ -502,6 +568,7 @@ impl<'a> Evaluator<'a> {
                     let chars: Vec<char> = s.borrow().chars().collect();
                     if idx >= chars.len() {
                         return Err(RuntimeEvent::error(
+                            ErrKind::Value,
                             format!("string index {} out of bounds (len = {})", idx, chars.len()),
                             expr.cursor,
                         ));
@@ -509,6 +576,7 @@ impl<'a> Evaluator<'a> {
                     Ok(Value::Str(Rc::new(RefCell::new(chars[idx].to_string()))))
                 }
                 _ => Err(RuntimeEvent::error(
+                    ErrKind::Type,
                     "value is not indexable".into(),
                     expr.cursor,
                 )),
@@ -529,6 +597,7 @@ impl<'a> Evaluator<'a> {
                 Value::Num(n) => n.0 as usize,
                 _ => {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Type,
                         "list index must be a Num".into(),
                         index.cursor,
                     ));
@@ -539,6 +608,7 @@ impl<'a> Evaluator<'a> {
                 Value::List(items) => {
                     if idx >= items.borrow().len() {
                         return Err(RuntimeEvent::error(
+                            ErrKind::Value,
                             format!(
                                 "list index {} out of bounds (len = {})",
                                 idx,
@@ -557,6 +627,7 @@ impl<'a> Evaluator<'a> {
                     let chars: Vec<char> = s.borrow().chars().collect();
                     if idx >= chars.len() {
                         return Err(RuntimeEvent::error(
+                            ErrKind::Value,
                             format!("string index {} out of bounds (len = {})", idx, chars.len()),
                             expr.cursor,
                         ));
@@ -570,11 +641,13 @@ impl<'a> Evaluator<'a> {
                     }
 
                     Err(RuntimeEvent::error(
+                        ErrKind::Type,
                         "can't set index of Str to non-Str".into(),
                         expr.cursor,
                     ))
                 }
                 _ => Err(RuntimeEvent::error(
+                    ErrKind::Type,
                     "value is not indexable".into(),
                     expr.cursor,
                 )),
@@ -594,6 +667,7 @@ impl<'a> Evaluator<'a> {
             if let Value::Callable(c) = callee {
                 if args_values.len() != c.arity() {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Arity,
                         format!(
                             "function expects {} arguments but got {}",
                             c.arity(),
@@ -608,6 +682,7 @@ impl<'a> Evaluator<'a> {
             if let Value::Obj(obj) = callee {
                 if args_values.len() != obj.arity() {
                     return Err(RuntimeEvent::error(
+                        ErrKind::Arity,
                         format!(
                             "object initializer expects {} arguments but got {}",
                             obj.arity(),
@@ -620,6 +695,7 @@ impl<'a> Evaluator<'a> {
             }
 
             return Err(RuntimeEvent::error(
+                ErrKind::Type,
                 "can only call functions or objects".into(),
                 expr.cursor,
             ));
@@ -643,6 +719,7 @@ impl<'a> Evaluator<'a> {
                         return Ok(Value::Callable(method.get_callable()));
                     } else {
                         return Err(RuntimeEvent::error(
+                            ErrKind::Name,
                             format!(
                                 "can't call bound method '{}' of object '{}' without an instance",
                                 name, obj.name
@@ -652,6 +729,7 @@ impl<'a> Evaluator<'a> {
                     }
                 }
                 return Err(RuntimeEvent::error(
+                    ErrKind::Name,
                     format!("static method '{}' undefined in object {}", name, obj.name),
                     expr.cursor,
                 ));
@@ -667,12 +745,14 @@ impl<'a> Evaluator<'a> {
                     return Ok(Value::Callable(Rc::new(bound)));
                 }
                 return Err(RuntimeEvent::error(
+                    ErrKind::Name,
                     format!("method '{}' not found in {} prototype", name, proto.name),
                     expr.cursor,
                 ));
             }
 
             return Err(RuntimeEvent::error(
+                ErrKind::Type,
                 "only instances and primitives with prototypes have properties".into(),
                 expr.cursor,
             ));
@@ -704,6 +784,7 @@ impl<'a> Evaluator<'a> {
             }
 
             return Err(RuntimeEvent::error(
+                ErrKind::Type,
                 "only instances have fields".into(),
                 expr.cursor,
             ));
@@ -722,7 +803,9 @@ impl<'a> Evaluator<'a> {
         if let ExprKind::Unary { op, right } = &expr.kind {
             let right = self.eval_expr(right)?;
             return match op {
-                UnaryOp::Negate => Ok(Value::Num(OrderedFloat(-right.check_num(expr.cursor, None)?))),
+                UnaryOp::Negate => Ok(Value::Num(OrderedFloat(
+                    -right.check_num(expr.cursor, None)?,
+                ))),
                 UnaryOp::Not => Ok(Value::Bool(!right.is_truthy())),
             };
         }
@@ -762,7 +845,8 @@ impl<'a> Evaluator<'a> {
                     left.check_num(cursor, None)? % right.check_num(cursor, None)?,
                 ))),
                 BinaryOp::Pow => Ok(Value::Num(OrderedFloat(
-                    left.check_num(cursor, None)?.powf(right.check_num(cursor, None)?),
+                    left.check_num(cursor, None)?
+                        .powf(right.check_num(cursor, None)?),
                 ))),
                 BinaryOp::Equals => Ok(Value::Bool(left.is_equal(&right))),
                 BinaryOp::NotEquals => Ok(Value::Bool(!left.is_equal(&right))),

@@ -10,11 +10,9 @@ use ordered_float::OrderedFloat;
 
 use crate::{
     evaluator::{
+        Callable, EvalResult, Evaluator,
         object::{Method, NativeMethod, Object},
-        runtime_err::RuntimeEvent,
-        Callable,
-        EvalResult,
-        Evaluator,
+        runtime_err::{ErrKind, RuntimeEvent},
         value::Value,
     },
     native_fn,
@@ -84,7 +82,11 @@ native_fn!(FnSysArgs, "sys_args", 0, |_evaluator, _args, _cursor| {
 // cwd() -> Str
 native_fn!(FnSysCwd, "sys_cwd", 0, |_evaluator, _args, cursor| {
     let cwd = std::env::current_dir().map_err(|err| {
-        RuntimeEvent::error(format!("failed to read current directory: {err}"), cursor)
+        RuntimeEvent::error(
+            ErrKind::IO,
+            format!("failed to read current directory: {err}"),
+            cursor,
+        )
     })?;
     Ok(Value::Str(Rc::new(RefCell::new(
         cwd.to_string_lossy().to_string(),

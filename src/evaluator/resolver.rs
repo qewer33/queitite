@@ -106,7 +106,7 @@ impl<'a> Resolver<'a> {
         for stmt in ast.iter_mut() {
             if let Err(err) = self.resolve_stmt(stmt) {
                 self.out.add_err(err.clone());
-                Reporter::error_at(&err.msg, self.src, err.cursor);
+                Reporter::error_at(&err.msg, "ResolveErr".into(), self.src, err.cursor);
             }
         }
 
@@ -130,6 +130,7 @@ impl<'a> Resolver<'a> {
     fn resolve_stmt(&mut self, stmt: &Stmt) -> ResolveResult {
         match &stmt.kind {
             StmtKind::Expr(_) => self.resolve_stmt_expr(stmt),
+            StmtKind::Err(_) => self.resolve_stmt_err(stmt),
             StmtKind::Return(_) => self.resolve_stmt_return(stmt),
             StmtKind::Break => Ok(()),
             StmtKind::Continue => Ok(()),
@@ -138,6 +139,7 @@ impl<'a> Resolver<'a> {
             StmtKind::If { .. } => self.resolve_stmt_if(stmt),
             StmtKind::For { .. } => self.resolve_stmt_for(stmt),
             StmtKind::While { .. } => self.resolve_stmt_while(stmt),
+            StmtKind::Try { .. } => self.resolve_stmt_try(stmt),
             StmtKind::Fn { .. } => self.resolve_stmt_fn(stmt),
             StmtKind::Obj { .. } => self.resolve_stmt_obj(stmt),
         }
@@ -177,6 +179,14 @@ impl<'a> Resolver<'a> {
             return Ok(());
         }
         unreachable!("Non-expr statement passed to Resolver::resolve_stmt_expr");
+    }
+
+    fn resolve_stmt_err(&mut self, stmt: &Stmt) -> ResolveResult {
+        if let StmtKind::Err(expr) = &stmt.kind {
+            self.resolve_expr(expr)?;
+            return Ok(());
+        }
+        unreachable!("Non-err statement passed to Resolver::resolve_stmt_err");
     }
 
     fn resolve_stmt_return(&mut self, stmt: &Stmt) -> ResolveResult {
@@ -259,6 +269,36 @@ impl<'a> Resolver<'a> {
             return Ok(());
         }
         unreachable!("Non-while statement passed to Resolver::resolve_stmt_while");
+    }
+
+    fn resolve_stmt_try(&mut self, stmt: &Stmt) -> ResolveResult {
+        if let StmtKind::Try {
+            body,
+            err_kind,
+            err_val,
+            catch,
+        } = &stmt.kind
+        {
+            self.resolve_stmt(body)?;
+
+            self.begin_scope();
+
+            if let Some(kind) = err_kind {
+                self.declare(kind.clone(), stmt.cursor);
+                self.define(kind.clone(), stmt.cursor);
+            }
+            if let Some(val) = err_val {
+                self.declare(val.clone(), stmt.cursor);
+                self.define(val.clone(), stmt.cursor);
+            }
+
+            self.resolve_stmt_block(catch, true)?;
+
+            self.end_scope();
+
+            return Ok(());
+        }
+        unreachable!("Non-try statement passed to Resolver::resolve_stmt_try");
     }
 
     fn resolve_stmt_fn(&mut self, stmt: &Stmt) -> ResolveResult {

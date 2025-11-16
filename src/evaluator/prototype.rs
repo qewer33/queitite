@@ -7,7 +7,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     evaluator::{
         EvalResult, Evaluator,
-        runtime_err::RuntimeEvent,
+        runtime_err::{RuntimeEvent, ErrKind},
         value::{Callable, Value},
     },
     lexer::cursor::Cursor,
@@ -26,6 +26,7 @@ macro_rules! proto_method {
             // receiver is always arg0
             let $recv = $args.get(0).ok_or_else(|| {
                 RuntimeEvent::error(
+                    ErrKind::Value,
                     concat!($str_name, " called without receiver").into(),
                     Cursor::new(),
                 )

@@ -1,22 +1,18 @@
 mod macros;
 mod math;
-mod rand;
 mod p5;
+mod rand;
 mod sys;
 mod term;
 mod tui;
 
-use std::{
-    cell::RefCell,
-    io::{self},
-    rc::Rc,
-};
+use std::{cell::RefCell, io, rc::Rc, str::FromStr};
 
 use crate::{
     evaluator::{
         Evaluator,
         env::{Env, EnvPtr},
-        runtime_err::EvalResult,
+        runtime_err::{ErrKind, EvalResult, RuntimeErr, RuntimeEvent},
         value::{Callable, Value},
     },
     native_fn,
@@ -38,6 +34,9 @@ impl Natives {
         natives
             .borrow_mut()
             .define("read".into(), Value::Callable(Rc::new(FnRead)));
+        natives
+            .borrow_mut()
+            .define("err".into(), Value::Callable(Rc::new(FnErr)));
 
         // global objects
         natives.borrow_mut().define("Sys".into(), sys::native_sys());
@@ -76,4 +75,17 @@ native_fn!(FnRead, "read", 0, |_evaluator, _args, _cursor| {
         .read_line(&mut string)
         .expect("Failed to read line");
     Ok(Value::Str(Rc::new(RefCell::new(string.trim().to_string()))))
+});
+
+// err(kind, msg) -> throws a runtime error of given kind
+native_fn!(FnErr, "err", 2, |_evaluator, args, cursor| {
+    let kind_str = args[0].check_str(cursor, Some("kind".into()))?;
+    let kind = ErrKind::from_str(kind_str.borrow().as_str())
+        .map_err(|_| RuntimeEvent::error(ErrKind::Value, "invalid error kind".into(), cursor))?;
+    let msg = args[1].check_str(cursor, Some("message".into()))?;
+    Err(RuntimeEvent::Err(RuntimeErr::new(
+        kind,
+        msg.borrow().clone(),
+        cursor,
+    )))
 });

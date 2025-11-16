@@ -5,12 +5,7 @@ use rand::Rng;
 
 use crate::{
     evaluator::{
-        runtime_err::RuntimeEvent,
-        Callable,
-        EvalResult,
-        Evaluator,
-        object::{Method, NativeMethod, Object},
-        value::Value,
+        Callable, EvalResult, Evaluator, object::{Method, NativeMethod, Object}, runtime_err::{ErrKind, RuntimeEvent}, value::Value
     },
     native_fn,
 };
@@ -67,6 +62,7 @@ native_fn!(FnRandList, "list", 1, |_evaluator, args, cursor| {
     let list = rc_list.borrow();
     if list.is_empty() {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "cannot choose a random element from an empty list".into(),
             cursor,
         ));
@@ -81,12 +77,14 @@ native_fn!(FnRandString, "string", 1, |_evaluator, args, cursor| {
     let len_num = args[0].check_num(cursor, Some("string length".into()))?;
     if len_num < 0.0 {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "string length must be non-negative".into(),
             cursor,
         ));
     }
     if (len_num.fract()).abs() > f64::EPSILON {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "string length must be an integer value".into(),
             cursor,
         ));
@@ -108,6 +106,7 @@ native_fn!(FnRandRange, "range", 2, |_evaluator, args, cursor| {
     let max = args[1].check_num(cursor, Some("max value".into()))?;
     if max <= min {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "max must be greater than min when calling Rand.range".into(),
             cursor,
         ));
@@ -123,6 +122,7 @@ native_fn!(FnRandInt, "int", 2, |_evaluator, args, cursor| {
     let max_raw = args[1].check_num(cursor, Some("max value".into()))?;
     if (min_raw.fract()).abs() > f64::EPSILON || (max_raw.fract()).abs() > f64::EPSILON {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "Rand.int expects integer bounds".into(),
             cursor,
         ));
@@ -131,6 +131,7 @@ native_fn!(FnRandInt, "int", 2, |_evaluator, args, cursor| {
     let max = max_raw as i64;
     if max < min {
         return Err(RuntimeEvent::error(
+            ErrKind::Value,
             "max must be greater than or equal to min when calling Rand.int".into(),
             cursor,
         ));
