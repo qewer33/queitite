@@ -58,7 +58,10 @@ impl<'a> Evaluator<'a> {
             match self.eval_stmt(stmt) {
                 Ok(_) => {}
                 Err(err) => {
-                    if let RuntimeEvent::Err(RuntimeErr { kind, msg, cursor, .. }) = err {
+                    if let RuntimeEvent::Err(RuntimeErr {
+                        kind, msg, cursor, ..
+                    }) = err
+                    {
                         Reporter::error_at(&msg, kind.to_string(), self.src, cursor);
                         return;
                     }
@@ -374,6 +377,7 @@ impl<'a> Evaluator<'a> {
     fn eval_expr(&mut self, expr: &Expr) -> EvalResult<Value> {
         match &expr.kind {
             ExprKind::Binary { .. } => self.eval_expr_binary(expr),
+            ExprKind::Ternary { .. } => self.eval_expr_ternary(expr),
             ExprKind::Grouping { .. } => self.eval_expr_grouping(expr),
             ExprKind::Unary { .. } => self.eval_expr_unary(expr),
             ExprKind::Literal(_) => self.eval_expr_literal(expr),
@@ -418,6 +422,22 @@ impl<'a> Evaluator<'a> {
         }
 
         unreachable!("Non-assign passed to Evaluator::eval_expr_assign");
+    }
+
+    fn eval_expr_ternary(&mut self, expr: &Expr) -> EvalResult<Value> {
+        if let ExprKind::Ternary {
+            condition,
+            true_branch,
+            false_branch,
+        } = &expr.kind
+        {
+            if self.eval_expr(&condition)?.is_truthy() {
+                return self.eval_expr(&true_branch);
+            } else {
+                return self.eval_expr(&false_branch);
+            }
+        }
+        unreachable!("Non-ternary passed to Evaluator::eval_expr_ternary");
     }
 
     fn eval_expr_var(&mut self, expr: &Expr) -> EvalResult<Value> {

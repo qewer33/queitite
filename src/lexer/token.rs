@@ -41,6 +41,8 @@ pub enum TokenKind {
     RBrace,
     Comma,
     Dot,
+    Colon,
+    Question,
     Range,
     RangeEq,
     // Other
@@ -92,6 +94,8 @@ impl ToString for TokenKindDiscriminants {
             TokenKindDiscriminants::RBrace => "RBrace",
             TokenKindDiscriminants::Comma => "Comma",
             TokenKindDiscriminants::Dot => "Dot",
+            TokenKindDiscriminants::Colon => "Colon",
+            TokenKindDiscriminants::Question => "Question",
             TokenKindDiscriminants::Range => "Range",
             TokenKindDiscriminants::RangeEq => "RangeEq",
 

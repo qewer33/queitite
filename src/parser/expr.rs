@@ -25,6 +25,11 @@ pub enum ExprKind {
         op: BinaryOp,
         right: Box<Expr>,
     },
+    Ternary {
+        condition: Box<Expr>,
+        true_branch: Box<Expr>,
+        false_branch: Box<Expr>,
+    },
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,

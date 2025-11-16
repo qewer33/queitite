@@ -458,7 +458,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> ParseResult<Expr> {
-        let expr = self.or()?;
+        let expr = self.ternary()?;
 
         if self.match_tokens(vec![
             TokenKindDiscriminants::Assign,
@@ -515,6 +515,27 @@ impl<'a> Parser<'a> {
                 "invalid assignment target".into(),
                 self.previous().cursor,
             ));
+        }
+
+        Ok(expr)
+    }
+
+    fn ternary(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.or()?;
+
+        while self.match_tokens(vec![TokenKindDiscriminants::Question]) {
+            let true_branch = Box::new(self.ternary()?);
+            self.consume(
+                TokenKindDiscriminants::Colon,
+                "expected ':' in ternary expression".into(),
+            )?;
+            let false_branch = Box::new(self.ternary()?);
+            expr.kind = ExprKind::Ternary {
+                condition: Box::new(expr.clone()),
+                true_branch,
+                false_branch
+            };
+            expr.cursor = self.previous().cursor;
         }
 
         Ok(expr)

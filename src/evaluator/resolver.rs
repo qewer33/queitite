@@ -358,6 +358,16 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(right)?;
                 Ok(())
             }
+            ExprKind::Ternary {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
+                self.resolve_expr(condition)?;
+                self.resolve_expr(true_branch)?;
+                self.resolve_expr(false_branch)?;
+                Ok(())
+            }
             ExprKind::Grouping { expr: inner } => {
                 self.resolve_expr(inner)?;
                 Ok(())

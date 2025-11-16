@@ -39,8 +39,9 @@ whileStmt      → varDeclrHeader? "while" expression ("step" assignment)? state
 block          → "do" declaration "end" ;
 
 expression     → assignment ;
-assignment     → ( call "." )? IDENTIFIER ("=" | "+=" | "-=" ) assignment
-               | logic_or ;
+assignment     → ( call "." )? IDENTIFIER ( ( "=" | "+=" | "-=" ) assignment | ( "++" | "--" ) )
+               | ternary_or ;
+ternary        → logic_r ( "?" expression ":" ternary )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
 logic_and      → equality ( "and" equality )* ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;

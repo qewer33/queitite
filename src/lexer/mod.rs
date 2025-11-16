@@ -150,6 +150,10 @@ impl Lexer {
                 self.next();
                 Some(TokenKind::Not)
             }
+            ':' => {
+                self.next();
+                Some(TokenKind::Colon)
+            }
             '?' => {
                 if self.consume('?') {
                     self.next();
@@ -157,7 +161,7 @@ impl Lexer {
                 }
 
                 self.next();
-                None
+                Some(TokenKind::Question)
             }
             // Symbols
             '(' => {

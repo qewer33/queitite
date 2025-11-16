@@ -1,16 +1,3 @@
-fn test(n) do
-    if !n.type_of("Num") do
-        throw err("TypeErr", "n should be Num")
-    end
-    println(n)
-end
-
-test("10")
-
-try do
-    test("skjdfk")
-catch e, v do
-    println("amogus")
-    println(e)
-    println(v)
-end
+var a = read().parse_num()
+var b = read().parse_num()
+println(a > 10 ? b < 10 ? "amogus" : "imposter" : "sus")
