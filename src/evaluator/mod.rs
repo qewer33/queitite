@@ -11,6 +11,7 @@ pub mod value;
 use std::{
     cell::RefCell,
     collections::HashMap,
+    panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -750,7 +751,23 @@ impl<'a> Evaluator<'a> {
                         expr.cursor,
                     ));
                 }
-                return Ok(c.call(self, args_values, expr.cursor)?);
+                // handle panics via catch_unwind
+                let call_res =
+                    catch_unwind(AssertUnwindSafe(|| c.call(self, args_values, expr.cursor)));
+                let res = match call_res {
+                    Ok(r) => r,
+                    Err(payload) => {
+                        let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = payload.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "native panic".to_string()
+                        };
+                        return Err(RuntimeEvent::error(ErrKind::Native, msg, expr.cursor));
+                    }
+                };
+                return Ok(res?);
             }
 
             if let Value::Obj(obj) = callee {
@@ -765,7 +782,24 @@ impl<'a> Evaluator<'a> {
                         expr.cursor,
                     ));
                 }
-                return Ok(obj.call(self, args_values, expr.cursor)?);
+                // handle panics via catch_unwind
+                let call_res = catch_unwind(AssertUnwindSafe(|| {
+                    obj.call(self, args_values, expr.cursor)
+                }));
+                let res = match call_res {
+                    Ok(r) => r,
+                    Err(payload) => {
+                        let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = payload.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "native panic".to_string()
+                        };
+                        return Err(RuntimeEvent::error(ErrKind::Native, msg, expr.cursor));
+                    }
+                };
+                return Ok(res?);
             }
 
             return Err(RuntimeEvent::error(

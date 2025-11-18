@@ -7,7 +7,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     evaluator::{
         EvalResult, Evaluator,
-        runtime_err::{RuntimeEvent, ErrKind},
+        runtime_err::{ErrKind, RuntimeEvent},
         value::{Callable, Value},
     },
     lexer::cursor::Cursor,
@@ -158,7 +158,9 @@ impl ValuePrototypes {
             1,
             |_evaluator, args, cursor, recv| {
                 if let Value::Str(str) = &args[1] {
-                    return recv.check_type(str.borrow().clone(), cursor).map(|v| Value::Bool(v));
+                    return recv
+                        .check_type(str.borrow().clone(), cursor)
+                        .map(|v| Value::Bool(v));
                 }
                 Ok(Value::Null)
             }

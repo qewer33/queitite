@@ -8,7 +8,10 @@ use ordered_float::OrderedFloat;
 
 use crate::{
     evaluator::{
-        Callable, EvalResult, Evaluator, object::{Method, NativeMethod, Object}, runtime_err::{ErrKind, RuntimeEvent}, value::Value
+        Callable, EvalResult, Evaluator,
+        object::{Method, NativeMethod, Object},
+        runtime_err::{ErrKind, RuntimeEvent},
+        value::Value,
     },
     native_fn,
 };

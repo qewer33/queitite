@@ -47,7 +47,7 @@ impl Callable for NativeMethod {
         &self,
         evaluator: &mut crate::evaluator::Evaluator,
         mut args: Vec<Value>,
-        cursor: Cursor
+        cursor: Cursor,
     ) -> EvalResult<Value> {
         if let Some(bind) = &self.bind {
             args.insert(0, bind.clone());
@@ -133,7 +133,7 @@ impl Callable for Object {
         &self,
         evaluator: &mut super::Evaluator,
         args: Vec<super::value::Value>,
-        cursor: Cursor
+        cursor: Cursor,
     ) -> EvalResult<Value> {
         let inst = Value::ObjInstance(Rc::new(RefCell::new(Instance::new(self.clone()))));
 

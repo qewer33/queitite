@@ -4,7 +4,9 @@ use crate::{
         env::{Env, EnvPtr},
         runtime_err::{EvalResult, RuntimeEvent},
         value::{Callable, Value},
-    }, lexer::cursor::Cursor, parser::stmt::{Stmt, StmtKind}
+    },
+    lexer::cursor::Cursor,
+    parser::stmt::{Stmt, StmtKind},
 };
 
 #[derive(Debug, Clone)]
@@ -57,7 +59,12 @@ impl Callable for Function {
         unreachable!("Non-fn statement passed as declaration to Function::new(declr)");
     }
 
-    fn call(&self, evaluator: &mut Evaluator, args: Vec<Value>, cursor: Cursor) -> EvalResult<Value> {
+    fn call(
+        &self,
+        evaluator: &mut Evaluator,
+        args: Vec<Value>,
+        cursor: Cursor,
+    ) -> EvalResult<Value> {
         if let StmtKind::Fn { params, body, .. } = &self.declr.kind {
             let env = Env::enclosed(self.closure.clone());
 

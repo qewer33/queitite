@@ -206,8 +206,16 @@ impl Widget {
                     .label(label.clone());
                 frame.render_widget(gauge, area);
             }
-            Widget::Canvas(widget) => render_canvas(frame, widget, widget_rect(frame, widget.x, widget.y, widget.width, widget.height)),
-            Widget::TextInput(widget) => render_text_input(frame, widget, widget_rect(frame, widget.x, widget.y, widget.width, 3)),
+            Widget::Canvas(widget) => render_canvas(
+                frame,
+                widget,
+                widget_rect(frame, widget.x, widget.y, widget.width, widget.height),
+            ),
+            Widget::TextInput(widget) => render_text_input(
+                frame,
+                widget,
+                widget_rect(frame, widget.x, widget.y, widget.width, 3),
+            ),
         }
     }
 }

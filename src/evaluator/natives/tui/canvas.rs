@@ -12,10 +12,10 @@ use crate::evaluator::{
 };
 
 use ratatui::{
+    Frame,
     layout::Rect,
     style::Color,
     widgets::canvas::{Canvas as RatatuiCanvas, Circle, Line, Points, Rectangle},
-    Frame,
 };
 
 // Tui.create_canvas(x, y, width, height) -> Canvas object
