@@ -1,6 +1,15 @@
-use "script.qte"
+print("Enter num a: ")
+var a = read().parse_num()
+print("Enter num a: ")
+var b = read().parse_num()
 
-var a12 = 5
+print("Enter operation (+-*/): ")
+var op = read()
 
-println(a12)
-amogus()
+print("Result: ")
+match op do
+    "+" println(a + b)
+    "-" println(a - b)
+    "*" println(a * b)
+    "/" println(a / b)
+else println("invalid operation")

@@ -138,6 +138,7 @@ impl<'a> Resolver<'a> {
             StmtKind::Var { .. } => self.resolve_stmt_var(stmt),
             StmtKind::Block(_) => self.resolve_stmt_block(stmt, false),
             StmtKind::If { .. } => self.resolve_stmt_if(stmt),
+            StmtKind::Match { .. } => self.resolve_stmt_match(stmt),
             StmtKind::For { .. } => self.resolve_stmt_for(stmt),
             StmtKind::While { .. } => self.resolve_stmt_while(stmt),
             StmtKind::Try { .. } => self.resolve_stmt_try(stmt),
@@ -223,6 +224,26 @@ impl<'a> Resolver<'a> {
             return Ok(());
         }
         unreachable!("Non-if statement passed to Resolver::resolve_stmt_if");
+    }
+
+    fn resolve_stmt_match(&mut self, stmt: &Stmt) -> ResolveResult {
+        if let StmtKind::Match {
+            val,
+            arms,
+            else_branch,
+        } = &stmt.kind
+        {
+            self.resolve_expr(val)?;
+            for (e, s) in arms.iter() {
+                self.resolve_expr(e)?;
+                self.resolve_stmt(s)?;
+            }
+            if let Some(else_s) = else_branch {
+                self.resolve_stmt(else_s)?;
+            }
+            return Ok(());
+        }
+        unreachable!("Non-match statement passed to Resolver::resolve_stmt_match");
     }
 
     fn resolve_stmt_for(&mut self, stmt: &Stmt) -> ResolveResult {

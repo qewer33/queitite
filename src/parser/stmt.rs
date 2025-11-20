@@ -18,6 +18,11 @@ pub enum StmtKind {
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
     },
+    Match {
+        val: Expr,
+        arms: Vec<(Expr, Stmt)>,
+        else_branch: Option<Box<Stmt>>,
+    },
     While {
         declr: Option<Box<Stmt>>,
         condition: Expr,

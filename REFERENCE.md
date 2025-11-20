@@ -58,7 +58,6 @@ Quetite has 8 value types:
 - **ObjInstance**: Each object instance acts like it's own type but internally, they're represented as a single object instance type.
 
 ### Truthiness
-### Truthiness
 
 In Bool contexts (such as the conditions in an `if` or `while` statement), non-Bool values are converted to a Bool value via the internal truthiness table. `Null` and `0` are considered to be falsy while everything else (including all Str and non-zero Num values) is truthy.
 
@@ -360,6 +359,47 @@ else if a > 5 do
 else do
     println("a is equal to 5")
 end
+```
+
+#### Match
+
+The match statement (also called `switch` or `case` in other languages) is used to check a value against a list of other values and execute a stetement if they match. It can be used to replace a series of `if...else` statements. The syntax is `match value do <arms> end`. A match arm is a value followed by a statement (can be a block or a single line statement, see below examples). A match statement can have an optional `else` branch at the end which runs if nothing matches the value.
+
+```rb
+# matching a variable against different values
+var a = 0
+
+match a do
+    0 do
+        println("a is zero!")
+    end
+    1 do
+        println("a is one!")
+    end
+    "among us" do
+        println("a is sus???")
+    end
+end
+```
+
+```rb
+# simple calculator program using a compact match
+print("Enter num a: ")
+var a = read().parse_num()
+print("Enter num a: ")
+var b = read().parse_num()
+
+print("Enter operation (+-*/): ")
+var op = read()
+
+print("Result: ")
+match op do
+    "+" println(a + b)
+    "-" println(a - b)
+    "*" println(a * b)
+    "/" println(a / b)
+else println("invalid operation")
+
 ```
 
 #### While
@@ -696,6 +736,7 @@ statement      → exprStmt
 exprStmt       → expression EOL ;
 ifStmt         → "if" expression statement
                ( "else" statement )? ;
+matchStmt      → "match" expression "do" ( expression statement )* ( "end" | ( "else" statement )? ) ;
 returnStmt     → "return" expression EOL ;
 throwStmt      → "throw" expression EOL ;
 breakStmt      → "break" EOL ; 

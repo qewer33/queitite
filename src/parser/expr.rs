@@ -1,3 +1,4 @@
+use ordered_float::OrderedFloat;
 use std::cell::RefCell;
 
 use crate::lexer::{
@@ -112,7 +113,7 @@ pub enum OpFromTokenError {
 #[derive(Debug, Clone)]
 pub enum LiteralType {
     Null,
-    Num(f64),
+    Num(OrderedFloat<f64>),
     Str(String),
     Bool(bool),
 }

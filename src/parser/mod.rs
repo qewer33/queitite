@@ -2,6 +2,7 @@ pub mod expr;
 pub mod parse_err;
 pub mod stmt;
 
+use ordered_float::OrderedFloat;
 use strum::IntoDiscriminant;
 
 use crate::{
@@ -250,6 +251,9 @@ impl<'a> Parser<'a> {
         if self.match_keyword(KeywordKind::If) {
             return self.if_stmt();
         }
+        if self.match_keyword(KeywordKind::Match) {
+            return self.match_stmt();
+        }
         if self.match_keyword(KeywordKind::While) {
             return self.while_stmt(None);
         }
@@ -285,6 +289,42 @@ impl<'a> Parser<'a> {
             StmtKind::If {
                 condition,
                 then_branch,
+                else_branch,
+            },
+            self.previous().cursor,
+        ))
+    }
+
+    fn match_stmt(&mut self) -> ParseResult<Stmt> {
+        let val = self.expr()?;
+        self.consume_keyword(KeywordKind::Do, "expected do after match value")?;
+
+        let mut arms: Vec<(Expr, Stmt)> = Vec::new();
+        self.skip_eols();
+        while !self.check_keyword(KeywordKind::Else)
+            && !self.check_keyword(KeywordKind::End)
+            && !self.is_at_end()
+        {
+            let match_val = self.expr()?;
+            let match_do = self.stmt()?;
+            arms.push((match_val, match_do));
+            self.skip_eols();
+        }
+
+        let mut else_branch: Option<Box<Stmt>> = None;
+        if self.match_keyword(KeywordKind::Else) {
+            else_branch = Some(Box::new(self.stmt()?));
+        }
+
+        self.skip_eols();
+        if else_branch.is_none() {
+            self.consume_keyword(KeywordKind::End, "expected 'end' after match arms")?;
+        }
+
+        Ok(Stmt::new(
+            StmtKind::Match {
+                val,
+                arms,
                 else_branch,
             },
             self.previous().cursor,
@@ -492,7 +532,7 @@ impl<'a> Parser<'a> {
         ]) {
             let op = AssignOp::try_from(&self.previous().kind).unwrap();
             let mut val = Expr::new(
-                ExprKind::Literal(LiteralType::Num(1.0)),
+                ExprKind::Literal(LiteralType::Num(OrderedFloat(1.0))),
                 self.current().cursor,
             );
             if self.previous().kind != TokenKind::Incr && self.previous().kind != TokenKind::Decr {
@@ -849,10 +889,10 @@ impl<'a> Parser<'a> {
         if self.match_tokens(vec![TokenKindDiscriminants::Num]) {
             if let TokenKind::Num(s) = self.previous().kind {
                 return Ok(Expr::new(
-                    ExprKind::Literal(LiteralType::Num(
+                    ExprKind::Literal(LiteralType::Num(OrderedFloat(
                         s.parse::<f64>()
-                            .map_err(|err| ParseErr::from(err).msg("invalid int literal".into()))?,
-                    )),
+                            .map_err(|err| ParseErr::from(err).msg("invalid num literal".into()))?,
+                    ))),
                     self.previous().cursor,
                 ));
             }

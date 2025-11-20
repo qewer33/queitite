@@ -104,6 +104,7 @@ impl<'a> Evaluator<'a> {
             StmtKind::Var { .. } => self.eval_stmt_var(stmt),
             StmtKind::Block(_) => self.eval_stmt_block(stmt, Env::enclosed(self.env.clone())),
             StmtKind::If { .. } => self.eval_stmt_if(stmt),
+            StmtKind::Match { .. } => self.eval_stmt_match(stmt),
             StmtKind::For { .. } => self.eval_stmt_for(stmt),
             StmtKind::While { .. } => self.eval_stmt_while(stmt),
             StmtKind::Try { .. } => self.eval_stmt_try(stmt),
@@ -190,6 +191,30 @@ impl<'a> Evaluator<'a> {
             return Ok(());
         }
         unreachable!("Non-if statement passed to Evaluator::eval_stmt_if");
+    }
+
+    fn eval_stmt_match(&mut self, stmt: &Stmt) -> EvalResult<()> {
+        if let StmtKind::Match {
+            val,
+            arms,
+            else_branch,
+        } = &stmt.kind
+        {
+            let val = self.eval_expr(val)?;
+
+            for (e, s) in arms.iter() {
+                let arm_val = self.eval_expr(e)?;
+                if val.is_equal(&arm_val) {
+                    return self.eval_stmt(s);
+                }
+            }
+
+            if let Some(stmt) = else_branch {
+                self.eval_stmt(stmt)?;
+            }
+            return Ok(());
+        }
+        unreachable!("Non-match statement passed to Evaluator::eval_stmt_match");
     }
 
     fn eval_stmt_for(&mut self, stmt: &Stmt) -> EvalResult<()> {
@@ -523,7 +548,7 @@ impl<'a> Evaluator<'a> {
         if let ExprKind::Literal(literal) = &expr.kind {
             return match literal {
                 LiteralType::Null => Ok(Value::Null),
-                LiteralType::Num(i) => Ok(Value::Num(OrderedFloat(*i))),
+                LiteralType::Num(i) => Ok(Value::Num(*i)),
                 LiteralType::Bool(b) => Ok(Value::Bool(*b)),
                 LiteralType::Str(s) => Ok(Value::Str(Rc::new(RefCell::new(s.clone())))),
             };

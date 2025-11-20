@@ -6,7 +6,12 @@ mod sys;
 mod term;
 mod tui;
 
-use std::{cell::RefCell, io, rc::Rc, str::FromStr};
+use std::{
+    cell::RefCell,
+    io::{self, Write},
+    rc::Rc,
+    str::FromStr,
+};
 
 use crate::{
     evaluator::{
@@ -69,11 +74,18 @@ native_fn!(FnPrintln, "println", 1, |_evaluator, args, _cursor| {
 });
 
 // read() -> Str
-native_fn!(FnRead, "read", 0, |_evaluator, _args, _cursor| {
+native_fn!(FnRead, "read", 0, |_evaluator, _args, cursor| {
+    io::stdout().flush().map_err(|err| {
+        RuntimeEvent::error(
+            ErrKind::IO,
+            format!("failed to flush stdout: {}", err),
+            cursor,
+        )
+    })?;
     let mut string = String::new();
-    io::stdin()
-        .read_line(&mut string)
-        .expect("Failed to read line");
+    io::stdin().read_line(&mut string).map_err(|err| {
+        RuntimeEvent::error(ErrKind::IO, format!("failed to read line: {}", err), cursor)
+    })?;
     Ok(Value::Str(Rc::new(RefCell::new(string.trim().to_string()))))
 });
 
