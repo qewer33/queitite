@@ -4,7 +4,7 @@ This document aims to be a quick and simple reference guide for the quetite lang
 
 ## Quick Start
 
-Start by creating a new file with the `.qte` extension (eg. `hello.qte`). Write the following line inside the file:
+Start by creating a new file with the `.qte` extension (eg. `hello.qte`). You can choose the Ruby language as the syntax highlighting in your editor (doesn't highlight everything correctly but it's mostly decent since quetite syntax is similar to Ruby). Write the following line inside the file:
 
 ```rb
 println("Hello World")
@@ -33,7 +33,7 @@ Comments in quetite start with the hash (`#`) character and continue to the end 
 
 Identifiers are names used for variables, functions and objects. Identifiers in quetite can only contain letters, numbers or underscores (`_`). Identifiers cannot start with a number. Identifiers are case sensitive.
 
-For variable and function identifiers, `snake_case` is recommended. For object identifiers, `PascalCase` is recommended.
+For variable and function identifiers, `snake_case` is recommended. For object identifiers, `PascalCase` is preffered.
 
 ### Whitespaces & Newlines
 
@@ -80,7 +80,17 @@ The null type that can only be the Null literal. The Null literal represents an 
 
 #### Bool
 
-The boolean type that can either be `true` or `false`.
+The boolean type that can either be `true` or `false`. It's the value type returned by boolean operations.
+
+```rb
+var a = true
+
+# b = false
+var b = !a
+
+# c = true
+var c = a or b
+```
 
 #### Num
 
@@ -131,6 +141,25 @@ println(fruits[1])
 println(stuff.len())
 ```
 
+#### Callable
+
+Functions in quetite are first-class as the Callable type, meaning they can be assigned to variables and passed around as arguments to other functions or as object fields.
+
+```rb
+# an example of passing a function to another function as callback
+fn read_and_do(callback) do
+    var input = read()
+    callback(input)
+end
+
+# reads input from the user and prints it
+read_and_do(println)
+```
+
+#### Obj
+
+Objects are also first-class in quetite, just like functions. Object definitions can be assigned to variables, passed around as function parameters and can be returned from functions.
+
 ## Grammar
 
 Quetite has two distinct grammar structures, statements and expressions. Expressions get evaluated to a value while statements get executed without any output value.
@@ -164,13 +193,14 @@ Boolean expressions in quetite are very similar with other mainstream scripting 
 | Lesser Equal       | <=           | a <= b    |
 | Greater            | >            | a > b     |
 | Lesser             | <            | a < b     |
+| Negation           | !            | !a        |
 | Logical And        | and          | a and b   |
 | Logical Or         | or           | a or b    |
 | Nullish Coalescing | ??           | a ?? b    |
 
 The nullish coalescing (`a ?? b`) operator is a special operator that returns `b` if `a == Null`, returns `a` otherwise. It supports all types, `a` and `b` can also be different types.
 
-The equal operation is supported by all value types but only works if `a` and `b` are the same type. The logical and/or operators are supported on every type via the truthiness table. Comparison operators are only supported on Num values.
+The equal operation is supported by all value types but only works if `a` and `b` are the same type. The logical and/or operators are supported on every type via the truthiness table. Comparison operators are only supported on Num values. All the boolean operations (excluding nullish coalescing) evaluate to a Bool value.
 
 #### Group
 
@@ -182,6 +212,20 @@ var a = 5 * (4 + 3)
 # call Num.round() on the resulting expression
 var b = (5.32 * a).round()
 ```
+
+### Assignment
+
+An assignment epression is used to re-assign the value of an already defined (see Variable Declaration in Statements). Quetite has 5 different assignment operations:
+
+| **Operation**     | **Operator** | **Usage** |
+|-------------------|--------------|-----------|
+| Normal Assignment | =            | a = b     |
+| Add Assign        | +=           | a += b    |
+| Sub Assign        | -=           | a -= b    |
+| Increment         | ++           | a++       |
+| Decrement         | --           | a--       |
+
+The normal assignment operation is supported by all types and the two values do not have to be of the same type. The add assign operation is supported by Num, Str and List types. The other operations are only supported by the Num type.
 
 #### Ternary
 
@@ -311,8 +355,8 @@ end
 # emulating a C-style for loop
 var i = 0
 while i < 10 do
-    i++
     println("quetite is cool!")
+    i++
 end
 
 # special syntax for emulating C-style for loops
@@ -344,18 +388,15 @@ end
 
 #### Try and Throw
 
-The classic `try...catch...ensure` statement combo that is used for catching runtime errors. The catch statement can have optional identifiers for accessing the error type and value (eg. `catch e, v`). The `ensure` (also called `finally` in other languages) statement can be omitted if  not needed.
-The classic `try...catch...ensure` statement combo that is used for catching runtime errors. The catch statement can have optional identifiers for accessing the error type and value (eg. `catch e, v`). The `ensure` (also called `finally` in other languages) statement can be omitted if  not needed.
+The classic `try...catch...ensure` statement combo that is used for catching runtime errors. The catch statement can have optional identifiers for accessing the error type and value (eg. `catch e, v`). The `ensure` (also called `finally` in other languages) statement always runs, can be omitted if not needed.
 
-The classic `throw` statement can be used for throwing runtime errors. The statement expects a value to be thrown (can be any type). For throwing internal error types (see below), the `err(type, message)` function can be used in combination with `throw` (see below examples).
 The classic `throw` statement can be used for throwing runtime errors. The statement expects a value to be thrown (can be any type). For throwing internal error types (see below), the `err(type, message)` function can be used in combination with `throw` (see below examples).
 
 Quetite has the following internal error types:
 - **TypeErr**: The error thrown for type mismatches.
 - **NameErr**:  The error thrown for name mismatches, usually when an identifier can't be found.
-- **ArityErr**: The error thrown for function arity mismatches.
-- **ValueErr**: The error thrown for value mismatches.
-- **NativeErr**: The error thrown when a fatal error (panic) occurs in native stdlib functions.
+- **ArityErr**: The error thrown for function arity (parameter count) mismatches.
+- **ValueErr**: The error thrown for value mismatches (eg. when a funciton expecst an integer Num but a float is provided).
 - **NativeErr**: The error thrown when a fatal error (panic) occurs in native stdlib functions.
 - **IOErr**: The error thrown when IO operations fail.
 - **UserErr**: The error thrown by the `throw` statement.
@@ -399,7 +440,6 @@ var list = [1, name, 37.42, true]
 #### Function Declaration
 
 Functions can be declared with the `fn` keyword, followed by the function name and arguments inside parentheses. Functions can take any statement as a body but a block (`do..end`) is preferred most of the time.
-Functions can be declared with the `fn` keyword, followed by the function name and arguments inside parentheses. Functions can take any statement as a body but a block (`do..end`) is preferred most of the time.
 
 ```rb
 # a single line square function
@@ -416,7 +456,6 @@ var a = square(10)
 
 #### Object Declaration
 
-Objects can be declared with the `obj` keyword, followed by the object name and body. Methods can be defined inside object bodies without any keywords. Methods that take `self` as an argument are *bound methods* that can only be called from an instance meanwhile methods without the special `self` value as an argument act as *static methods* that can be directly called from the object namespace. A custom constructor for the object can be defined with the `init()` method. Only one constructor is permitted.
 Objects can be declared with the `obj` keyword, followed by the object name and body. Methods can be defined inside object bodies without any keywords. Methods that take `self` as an argument are *bound methods* that can only be called from an instance meanwhile methods without the special `self` value as an argument act as *static methods* that can be directly called from the object namespace. A custom constructor for the object can be defined with the `init()` method. Only one constructor is permitted.
 
 ```rb
@@ -454,7 +493,7 @@ var pos2 = Pos.add(pos1, pos2)
 
 #### Use
 
-The `use` statement makes it possible to import scripts inside other scripts. It expects an Str after the keyword as the path of the script to be loaded. When loading a script, the interpreter first interprets the script to be loaded and then loads everything in the resulting global environment of the script (variable, function and object declarations) to the global environment of the current script.
+The `use` statement makes it possible to import scripts inside other scripts. It expects an Str after the keyword as the path of the script to be loaded. When loading a script, the interpreter first interprets the script to be loaded and then loads everything in the resulting global environment of the script (variables, functions and object declarations) to the global environment of the current script.
 
 ```rb
 # other.qte
@@ -468,6 +507,27 @@ use "other.qte"
 # prints 10
 println(a)
 ```
+
+## Standard Library
+
+The quetite standard library (stdlib) consists of functions and objects that are defined and implemented natively inside the qutite interpreter (in Rust). They are available to use in every quetite script without needing a `use` statement.
+
+The standard library has 4 global functions (all of which have been mentioned before in the document):
+
+- `println(val)`: Used to print a value to the terminal (standard output) with a line terminator (`\n`) at the end.
+- `print(val)`: Same as `println` but doesn't print line terminator (`\n`).
+- `read()`: Reads a line from the user (standard input) and returns it as an Str.
+- `err(type, msg)`: Used for throwing internal error types with a message.
+
+The standard library also has 7 global objects that act as namespaces for different API functions:
+
+- `Sys`: Provides system related functions (such as `Sys.sleep(ms)`, `Sys.clock()` and functions for reading CLI arguments). 
+- `Math`: Provides math related functions (such as `Math.sin(x)` and `Math.cos(x)`).
+- `Rand`: Provides functions for generating random numbers or making randomized choices.
+- `Term`: Provides terminal related functions.
+- `Fs`: Provides filysystem related functions.
+- `Tui`: A full API for creating TUIs (terminal user interfaces). Uses the very popular Rust TUI crate `ratatui` in the background.
+- `P5`: A full API for creative coding and basic computer graphics. Mimics the very popular Processing and p5.js frameworks.
 
 ## Appendix
 
