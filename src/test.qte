@@ -1,15 +1,7 @@
-print("Enter num a: ")
-var a = read().parse_num()
-print("Enter num a: ")
-var b = read().parse_num()
+var a = [0, 1, 2, 3]
 
-print("Enter operation (+-*/): ")
-var op = read()
+a[0..2] = ["amogus", "sus", "imposter"]
 
-print("Result: ")
-match op do
-    "+" println(a + b)
-    "-" println(a - b)
-    "*" println(a * b)
-    "/" println(a / b)
-else println("invalid operation")
+for e in a do
+    println(e)
+end

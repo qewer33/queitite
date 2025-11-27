@@ -30,13 +30,11 @@ obj Snake do
     end
 
     move(self) do
-        var head = self.head()
-
         var width = Term.size()[0]
         var height = Term.size()[1]
 
-        var new_x = head.x + self.xdir
-        var new_y = head.y + self.ydir
+        var new_x = self.head().x + self.xdir
+        var new_y = self.head().y + self.ydir
 
         # wrap snake when it hits borders
         if new_x < 0 do
@@ -105,8 +103,9 @@ obj Game do
         Term.cursor_hide()
         Term.clear()
 
-        Term.put(0, 0, "Score: ".blue().bold())
-        Term.put(7, 0, self.score.to_str())
+        Term.put(0, 0, " ".repeat(Term.size()[0]).on_blue())
+        Term.put(0, 0, "Score: ".white().on_blue().bold())
+        Term.put(7, 0, self.score.to_str().white().on_blue())
 
         # init 5 fruit
         for i in 0..10 do
@@ -147,7 +146,7 @@ obj Game do
                         self.spawn_fruit()
                         self.game_speed += 0.05
                         self.score++
-                        Term.put(7, 0, self.score.to_str())
+                        Term.put(7, 0, self.score.to_str().white().on_blue())
                     end
                 end
             end

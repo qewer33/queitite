@@ -1,7 +1,11 @@
 use colored::Colorize;
 use std::fmt::Display;
 
-use crate::{lexer::cursor::Cursor, parser::parse_err::ParseErr, src::Src};
+use crate::{
+    lexer::{LexErr, cursor::Cursor},
+    parser::parse_err::ParseErr,
+    src::Src,
+};
 
 pub enum ReportType {
     Info,
@@ -104,6 +108,18 @@ impl Reporter {
             err.cursor,
             err.expected.clone(),
             err.found.clone(),
+        );
+    }
+
+    pub fn lex_err_at(err: &LexErr, src: &Src) {
+        Reporter::report_at(
+            ReportType::Error,
+            Some("LexErr".into()),
+            err.msg.as_str(),
+            src,
+            err.cursor,
+            None,
+            None,
         );
     }
 

@@ -59,7 +59,22 @@ impl Loader {
             let mut src = Src::new(canonical.clone());
 
             let mut lexer = Lexer::new(src.text.clone());
-            src.tokens = Some(lexer.tokenize());
+            let lex_out = lexer.tokenize();
+            src.tokens = match lex_out.tokens {
+                Some(toks) => Some(toks),
+                None => {
+                    if let Some(errs) = lex_out.errors {
+                        for err in errs.iter() {
+                            Reporter::lex_err_at(err, &src);
+                        }
+                    }
+                    return Err(RuntimeEvent::error(
+                        ErrKind::Native,
+                        "lexer exited with errors".into(),
+                        Cursor::new(),
+                    ));
+                }
+            };
 
             let mut parser = Parser::new(&src);
             let parser_out = parser.parse();

@@ -47,7 +47,18 @@ fn main() {
 
     // 2) Lex
     let mut lexer = Lexer::new(src.text.clone());
-    src.tokens = Some(lexer.tokenize());
+    let lex_out = lexer.tokenize();
+    src.tokens = match lex_out.tokens {
+        Some(toks) => Some(toks),
+        None => {
+            if let Some(errs) = lex_out.errors {
+                for err in errs.iter() {
+                    Reporter::lex_err_at(err, &src);
+                }
+            }
+            std::process::exit(1);
+        }
+    };
 
     if args.dump_tokens || args.verbose {
         println!("== TOKENS ==");

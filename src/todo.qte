@@ -62,7 +62,7 @@ obj App do
                 self.items[self.focused_item].focused = false
 
                 if input.shift() do
-                    if self.focused_item > 1 do
+                    if self.focused_item > 0 do
                         self.focused_item--
                     end
                 else do

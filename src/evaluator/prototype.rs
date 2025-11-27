@@ -342,6 +342,23 @@ impl ValuePrototypes {
             }
         );
 
+        // repeat(n) -> Str: repeats the current Str n number of times and returns it as a new str
+        proto_method!(
+            proto,
+            StrRepeat,
+            "repeat",
+            1,
+            |_evaluator, args, cursor, recv| {
+                if let Value::Str(str) = recv {
+                    let n = args[1].check_num(cursor, Some("repeat amount".to_string()))?;
+                    return Ok(Value::Str(Rc::new(RefCell::new(
+                        str.borrow_mut().repeat(n as usize),
+                    ))));
+                }
+                unreachable!()
+            }
+        );
+
         // Foreground colors
         str_color_method!(proto, StrBlack, "black", black);
         str_color_method!(proto, StrRed, "red", red);

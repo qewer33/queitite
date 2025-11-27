@@ -94,7 +94,7 @@ var c = a or b
 
 #### Num
 
-The number type holds integer and floating point numbers. Internally it's a 64 bit float.  The Num prototype provides many functions to make it easier to work with numbers.
+The number type holds integer and floating point numbers. Internally it's a 64 bit float. The Num prototype provides many functions to make it easier to work with numbers.
 
 ```rb
 # an integer and a float
@@ -108,7 +108,7 @@ var a = 10.36.round()
 
 #### Str
 
-The string type that holds a dynamically allocated string. String literals are created with the double quote character (`""`). Strings are indexable. The Str prototype provides many functions to make it easier to work with strings.
+The string type that holds a dynamically allocated string. String literals are created with the double quote character (`""`). Str values can be indexed with the indexing (`value[i]`) syntax, the index should either be a Num or a List of Nums. The Str prototype provides many functions to make it easier to work with strings.
 
 ```rb
 # defining an Str
@@ -125,7 +125,7 @@ println(str.len())
 
 #### List
 
-The list type that holds a dynamically allocated list. A List can hold any type and any number of elements, it can also hold mixed types of elements. List literals are created with square braces (`[]`) and the list elements are separated with commas (`,`). Lists are indexable. The List prototype provides many functions to make it easier to work with lists.
+The list type that holds a dynamically allocated list. A List can hold any type and any number of elements, it can also hold mixed types of elements. List literals are created with square braces (`[]`) and the list elements are separated with commas (`,`). Str values can be indexed with the indexing (`value[i]`) syntax, the index should either be a Num or a List of Nums. The List prototype provides many functions to make it easier to work with lists.
 
 ```rb
 # defining a List
@@ -202,17 +202,6 @@ The nullish coalescing (`a ?? b`) operator is a special operator that returns `b
 
 The equal operation is supported by all value types but only works if `a` and `b` are the same type. The logical and/or operators are supported on every type via the truthiness table. Comparison operators are only supported on Num values. All the boolean operations (excluding nullish coalescing) evaluate to a Bool value.
 
-#### Group
-
-A group is used to change the evaluation order of expressions, it's defined with a set of parentheses (`()`).
-
-```rb
-var a = 5 * (4 + 3)
-
-# call Num.round() on the resulting expression
-var b = (5.32 * a).round()
-```
-
 ### Assignment
 
 An assignment epression is used to re-assign the value of an already defined (see Variable Declaration in Statements). Quetite has 5 different assignment operations:
@@ -226,6 +215,17 @@ An assignment epression is used to re-assign the value of an already defined (se
 | Decrement         | --           | a--       |
 
 The normal assignment operation is supported by all types and the two values do not have to be of the same type. The add assign operation is supported by Num, Str and List types. The other operations are only supported by the Num type.
+
+#### Group
+
+A group is used to change the evaluation order of expressions, it's defined with a set of parentheses (`()`).
+
+```rb
+var a = 5 * (4 + 3)
+
+# call Num.round() on the resulting expression
+var b = (5.32 * a).round()
+```
 
 #### Ternary
 
@@ -254,11 +254,27 @@ var a = [0, 2, 4, 8]
 var b = 0..=8 step 2
 ```
 
+The range operators can also be used to "slice" Lists and Strs.
+
+```rb
+# slicing an Str
+var a = "amogus"
+a[0..3] = "sus"
+# prints "susgus"
+println(a)
+# prints "gus"
+println(a[3..a.len()])
+
+# slicing a List
+var b = [0, 1, 2, 3]
+# prints [0, 1]
+println(b[0..2])
+```
+
 ### Statements
 
 #### Block
 
-A block opens a new lexical scope. Starts with the `do` keyword and ends with the `end` keyword. Blocks are usually used as bodies for other statements.
 A block opens a new lexical scope. Starts with the `do` keyword and ends with the `end` keyword. Blocks are usually used as bodies for other statements.
 
 ```rb
@@ -344,8 +360,6 @@ The classic `while` loop used for conditional looping. While loops in quetite al
 
 The `break` and `continue` statements can be used inside a while loop to control loop iterations.
 
-The `break` and `continue` statements can be used inside a while loop to control loop iterations.
-
 ```rb
 # infinite loop
 while true do
@@ -369,9 +383,7 @@ end
 
 For loops in quetite are used to iterate over iterable values (List and Str) with the `for value, index in list` syntax. The `index` identifier can be omitted if not required.
 
-The `break` and `continue` statements can be used inside a while loop to control loop iterations.
-
-The `break` and `continue` statements can be used inside a while loop to control loop iterations.
+The `break` and `continue` statements can be used inside a for loop to control loop iterations.
 
 ```rb
 # iterating over a list
@@ -528,6 +540,8 @@ The standard library also has 7 global objects that act as namespaces for differ
 - `Fs`: Provides filysystem related functions.
 - `Tui`: A full API for creating TUIs (terminal user interfaces). Uses the very popular Rust TUI crate `ratatui` in the background.
 - `P5`: A full API for creative coding and basic computer graphics. Mimics the very popular Processing and p5.js frameworks.
+
+For the full stdlib API documentation, see the *API reference*.
 
 ## Appendix
 

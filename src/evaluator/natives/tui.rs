@@ -1,11 +1,12 @@
 mod canvas;
 mod text_input;
 
+use ordered_float::OrderedFloat;
 use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 
 use crate::{
     evaluator::{
-        Callable, EvalResult, Evaluator,
+        Callable, ErrKind, EvalResult, Evaluator, RuntimeEvent,
         natives::tui::{
             canvas::{CanvasWidget, FnTuiCreateCanvas, render_canvas},
             text_input::{FnTuiCreateTextInput, TextInputWidget, render_text_input},
@@ -44,16 +45,40 @@ pub fn native_tui() -> Value {
         Method::Native(NativeMethod::new(Rc::new(FnTuiDrawBlock), false)),
     );
     methods.insert(
+        "draw_block_rect".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawBlockRect), false)),
+    );
+    methods.insert(
         "draw_text".into(),
         Method::Native(NativeMethod::new(Rc::new(FnTuiDrawText), false)),
+    );
+    methods.insert(
+        "draw_text_rect".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawTextRect), false)),
     );
     methods.insert(
         "draw_list".into(),
         Method::Native(NativeMethod::new(Rc::new(FnTuiDrawList), false)),
     );
     methods.insert(
+        "draw_list_rect".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawListRect), false)),
+    );
+    methods.insert(
+        "draw_checkbox".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawCheckbox), false)),
+    );
+    methods.insert(
+        "draw_checkbox_rect".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawCheckboxRect), false)),
+    );
+    methods.insert(
         "draw_progress".into(),
         Method::Native(NativeMethod::new(Rc::new(FnTuiDrawProgress), false)),
+    );
+    methods.insert(
+        "draw_progress_rect".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiDrawProgressRect), false)),
     );
     methods.insert(
         "clear".into(),
@@ -72,6 +97,14 @@ pub fn native_tui() -> Value {
         "create_text_input".into(),
         Method::Native(NativeMethod::new(Rc::new(FnTuiCreateTextInput), false)),
     );
+    methods.insert(
+        "split_row".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiSplitRow), false)),
+    );
+    methods.insert(
+        "split_col".into(),
+        Method::Native(NativeMethod::new(Rc::new(FnTuiSplitCol), false)),
+    );
 
     Value::Obj(Rc::new(Object::new("Tui".into(), methods)))
 }
@@ -87,12 +120,35 @@ enum Widget {
         title: String,
         style: TuiStyle,
     },
+    BlockRect {
+        rect_id: usize,
+        title: String,
+        style: TuiStyle,
+    },
     Text {
         x: u16,
         y: u16,
         width: u16,
         height: u16,
         text: String,
+        style: TuiStyle,
+    },
+    TextRect {
+        rect_id: usize,
+        text: String,
+        style: TuiStyle,
+    },
+    Checkbox {
+        x: u16,
+        y: u16,
+        label: String,
+        checked: bool,
+        style: TuiStyle,
+    },
+    CheckboxRect {
+        rect_id: usize,
+        label: String,
+        checked: bool,
         style: TuiStyle,
     },
     List {
@@ -105,10 +161,23 @@ enum Widget {
         style: TuiStyle,
         title: String,
     },
+    ListRect {
+        rect_id: usize,
+        items: Vec<String>,
+        selected: usize,
+        style: TuiStyle,
+        title: String,
+    },
     Progress {
         x: u16,
         y: u16,
         width: u16,
+        percent: u16,
+        label: String,
+        style: TuiStyle,
+    },
+    ProgressRect {
+        rect_id: usize,
         percent: u16,
         label: String,
         style: TuiStyle,
@@ -136,6 +205,20 @@ impl Widget {
                     .border_style(Style::default().fg(style.accent));
                 frame.render_widget(block, area);
             }
+            Widget::BlockRect {
+                rect_id,
+                title,
+                style,
+            } => {
+                if let Some(area) = rect_from_id(*rect_id, frame) {
+                    let block = Block::default()
+                        .title(title.clone())
+                        .borders(Borders::ALL)
+                        .style(style.text_style())
+                        .border_style(Style::default().fg(style.accent));
+                    frame.render_widget(block, area);
+                }
+            }
             Widget::Text {
                 x,
                 y,
@@ -149,6 +232,61 @@ impl Widget {
                     .style(style.text_style())
                     .wrap(Wrap { trim: false });
                 frame.render_widget(paragraph, area);
+            }
+            Widget::TextRect {
+                rect_id,
+                text,
+                style,
+            } => {
+                if let Some(area) = rect_from_id(*rect_id, frame) {
+                    let paragraph = Paragraph::new(text.clone())
+                        .style(style.text_style())
+                        .wrap(Wrap { trim: false });
+                    frame.render_widget(paragraph, area);
+                }
+            }
+            Widget::Checkbox {
+                x,
+                y,
+                label,
+                checked,
+                style,
+            } => {
+                let text = if *checked {
+                    format!("[x] {}", label)
+                } else {
+                    format!("[ ] {}", label)
+                };
+                let render_style = if *checked {
+                    style.text_style().fg(style.accent)
+                } else {
+                    style.text_style()
+                };
+                let width = text.len() as u16;
+                let area = widget_rect(frame, *x, *y, width, 1);
+                let paragraph = Paragraph::new(text).style(render_style);
+                frame.render_widget(paragraph, area);
+            }
+            Widget::CheckboxRect {
+                rect_id,
+                label,
+                checked,
+                style,
+            } => {
+                if let Some(area) = rect_from_id(*rect_id, frame) {
+                    let text = if *checked {
+                        format!("[x] {}", label)
+                    } else {
+                        format!("[ ] {}", label)
+                    };
+                    let render_style = if *checked {
+                        style.text_style().fg(style.accent)
+                    } else {
+                        style.text_style()
+                    };
+                    let paragraph = Paragraph::new(text).style(render_style);
+                    frame.render_widget(paragraph, area);
+                }
             }
             Widget::List {
                 x,
@@ -186,6 +324,40 @@ impl Widget {
 
                 frame.render_widget(list, area);
             }
+            Widget::ListRect {
+                rect_id,
+                items,
+                selected,
+                style,
+                title,
+            } => {
+                if let Some(area) = rect_from_id(*rect_id, frame) {
+                    let normal = style.text_style();
+                    let highlight = Style::default()
+                        .fg(style.accent)
+                        .bg(style.bg)
+                        .add_modifier(Modifier::BOLD);
+
+                    let list_items: Vec<ListItem> = items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, item)| {
+                            let prefix = if i == *selected { "> " } else { "  " };
+                            let item_style = if i == *selected { highlight } else { normal };
+                            ListItem::new(format!("{}{}", prefix, item)).style(item_style)
+                        })
+                        .collect();
+
+                    let list = List::new(list_items).block(
+                        Block::default()
+                            .title(title.clone())
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(style.accent)),
+                    );
+
+                    frame.render_widget(list, area);
+                }
+            }
             Widget::Progress {
                 x,
                 y,
@@ -205,6 +377,25 @@ impl Widget {
                     .percent(*percent)
                     .label(label.clone());
                 frame.render_widget(gauge, area);
+            }
+            Widget::ProgressRect {
+                rect_id,
+                percent,
+                label,
+                style,
+            } => {
+                if let Some(area) = rect_from_id(*rect_id, frame) {
+                    let gauge = Gauge::default()
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .border_style(Style::default().fg(style.accent)),
+                        )
+                        .gauge_style(style.text_style().fg(style.accent))
+                        .percent(*percent)
+                        .label(label.clone());
+                    frame.render_widget(gauge, area);
+                }
             }
             Widget::Canvas(widget) => render_canvas(
                 frame,
@@ -245,6 +436,39 @@ pub(super) fn widget_rect(frame: &Frame<'_>, x: u16, y: u16, width: u16, height:
             Constraint::Min(0),
         ])
         .split(row_area)[1]
+}
+
+fn rect_from_id(id: usize, _frame: &Frame<'_>) -> Option<Rect> {
+    RECTS.with(|r| r.borrow().get(id).copied())
+}
+
+fn reset_layout_state() {
+    LAYOUT_CMDS.with(|c| c.borrow_mut().clear());
+    NEXT_RECT_ID.with(|n| *n.borrow_mut() = 1);
+    RECTS.with(|r| r.borrow_mut().clear());
+}
+
+fn compute_rects(root: Rect) {
+    let mut rects = vec![Rect::new(0, 0, 0, 0); NEXT_RECT_ID.with(|n| *n.borrow())];
+    rects[0] = root;
+
+    LAYOUT_CMDS.with(|cmds| {
+        for cmd in cmds.borrow().iter() {
+            let splits = Layout::default()
+                .direction(cmd.direction)
+                .constraints(cmd.constraints.clone())
+                .split(rects[cmd.parent]);
+            for (i, rect) in splits.iter().enumerate() {
+                if cmd.start + i < rects.len() {
+                    rects[cmd.start + i] = *rect;
+                }
+            }
+        }
+    });
+
+    RECTS.with(|r| {
+        *r.borrow_mut() = rects;
+    });
 }
 
 #[derive(Clone)]
@@ -321,6 +545,17 @@ impl TuiStyle {
 thread_local! {
     static TERMINAL: RefCell<Option<Terminal<CrosstermBackend<io::Stdout>>>> = RefCell::new(None);
     static WIDGETS: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
+    static LAYOUT_CMDS: RefCell<Vec<LayoutCmd>> = RefCell::new(Vec::new());
+    static NEXT_RECT_ID: RefCell<usize> = RefCell::new(1); // 0 is root
+    static RECTS: RefCell<Vec<Rect>> = RefCell::new(Vec::new());
+}
+
+#[derive(Clone)]
+struct LayoutCmd {
+    parent: usize,
+    constraints: Vec<Constraint>,
+    direction: Direction,
+    start: usize,
 }
 
 // Tui.init(): initializes the TUI (enters alternate screen, raw mode)
@@ -363,6 +598,7 @@ native_fn!(FnTuiClear, "tui_clear", 0, |_evaluator, _args, _cursor| {
     WIDGETS.with(|w| {
         w.borrow_mut().clear();
     });
+    reset_layout_state();
 
     Ok(Value::Null)
 });
@@ -376,6 +612,7 @@ native_fn!(
         let result = TERMINAL.with(|t| -> io::Result<()> {
             if let Some(terminal) = t.borrow_mut().as_mut() {
                 terminal.draw(|frame| {
+                    compute_rects(frame.area());
                     WIDGETS.with(|w| {
                         for widget in w.borrow().iter() {
                             widget.render(frame);
@@ -420,6 +657,28 @@ native_fn!(
     }
 );
 
+// Tui.draw_block_rect(rect_id, title, border_color)
+native_fn!(
+    FnTuiDrawBlockRect,
+    "tui_draw_block_rect",
+    3,
+    |_evaluator, args, cursor| {
+        let rect_id = args[0].check_num(cursor, Some("rect id".into()))? as usize;
+        let title = string_from_value(&args[1]);
+        let style = TuiStyle::from_args(None, None, args.get(2));
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::BlockRect {
+                rect_id,
+                title,
+                style,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
 // Tui.draw_text(x, y, width, height, text, fg_color, bg_color)
 native_fn!(
     FnTuiDrawText,
@@ -440,6 +699,28 @@ native_fn!(
                 y,
                 width,
                 height,
+                text,
+                style,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
+// Tui.draw_text_rect(rect_id, text, fg_color, bg_color)
+native_fn!(
+    FnTuiDrawTextRect,
+    "tui_draw_text_rect",
+    4,
+    |_evaluator, args, cursor| {
+        let rect_id = args[0].check_num(cursor, Some("rect id".into()))? as usize;
+        let text = string_from_value(&args[1]);
+        let style = TuiStyle::from_args(args.get(2), args.get(3), None);
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::TextRect {
+                rect_id,
                 text,
                 style,
             });
@@ -497,6 +778,33 @@ native_fn!(
     }
 );
 
+// Tui.draw_checkbox(x, y, label, checked, fg_color, bg_color, accent_color)
+native_fn!(
+    FnTuiDrawCheckbox,
+    "tui_draw_checkbox",
+    7,
+    |_evaluator, args, cursor| {
+        let x = args[0].check_num(cursor, Some("x position".into()))? as u16;
+        let y = args[1].check_num(cursor, Some("y position".into()))? as u16;
+        let label = string_from_value(&args[2]);
+        let checked = args[3].check_bool(cursor, Some("checked".into()))?;
+
+        let style = TuiStyle::from_args(args.get(4), args.get(5), args.get(6));
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::Checkbox {
+                x,
+                y,
+                label,
+                checked,
+                style,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
 // Tui.draw_progress(x, y, width, percent, label, color)
 // percent: 0-100
 native_fn!(
@@ -526,6 +834,181 @@ native_fn!(
         });
 
         Ok(Value::Null)
+    }
+);
+
+// Tui.draw_list_rect(rect_id, items, selected, color, title)
+native_fn!(
+    FnTuiDrawListRect,
+    "tui_draw_list_rect",
+    5,
+    |_evaluator, args, cursor| {
+        let rect_id = args[0].check_num(cursor, Some("rect id".into()))? as usize;
+
+        let items = match &args[1] {
+            Value::List(list) => list
+                .borrow()
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<String>>(),
+            _ => vec![],
+        };
+        let selected_val = args[2].check_num(cursor, Some("selected index".into()))?;
+        let selected = if selected_val < 0.0 {
+            0
+        } else {
+            selected_val as usize
+        };
+
+        let style = TuiStyle::from_args(None, None, args.get(3));
+        let title = string_from_value(&args[4]);
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::ListRect {
+                rect_id,
+                items,
+                selected,
+                style,
+                title,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
+// Tui.draw_progress_rect(rect_id, percent, label, color)
+native_fn!(
+    FnTuiDrawProgressRect,
+    "tui_draw_progress_rect",
+    4,
+    |_evaluator, args, cursor| {
+        let rect_id = args[0].check_num(cursor, Some("rect id".into()))? as usize;
+        let percent = args[1]
+            .check_num(cursor, Some("percent".into()))?
+            .clamp(0.0, 100.0) as u16;
+        let label = string_from_value(&args[2]);
+        let style = TuiStyle::from_args(None, None, args.get(3));
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::ProgressRect {
+                rect_id,
+                percent,
+                label,
+                style,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
+// Tui.draw_checkbox_rect(rect_id, label, checked, fg, bg, accent)
+native_fn!(
+    FnTuiDrawCheckboxRect,
+    "tui_draw_checkbox_rect",
+    6,
+    |_evaluator, args, cursor| {
+        let rect_id = args[0].check_num(cursor, Some("rect id".into()))? as usize;
+        let label = string_from_value(&args[1]);
+        let checked = args[2].check_bool(cursor, Some("checked".into()))?;
+        let style = TuiStyle::from_args(args.get(3), args.get(4), args.get(5));
+
+        WIDGETS.with(|w| {
+            w.borrow_mut().push(Widget::CheckboxRect {
+                rect_id,
+                label,
+                checked,
+                style,
+            });
+        });
+
+        Ok(Value::Null)
+    }
+);
+
+// Split utilities: percent-only constraints for simplicity
+fn constraints_from_value(
+    val: &Value,
+    cursor: crate::lexer::cursor::Cursor,
+) -> EvalResult<Vec<Constraint>> {
+    if let Value::List(list) = val {
+        let mut out = Vec::new();
+        for v in list.borrow().iter() {
+            let p = v
+                .check_num(cursor, Some("constraint".into()))?
+                .clamp(0.0, 100.0);
+            out.push(Constraint::Percentage(p as u16));
+        }
+        Ok(out)
+    } else {
+        Err(RuntimeEvent::error(
+            ErrKind::Type,
+            "constraints must be a List of numbers (percentages)".into(),
+            cursor,
+        ))
+    }
+}
+
+// Tui.split_row(parent_rect_id, constraints:list<num>) -> list<num rect_ids>
+native_fn!(
+    FnTuiSplitRow,
+    "tui_split_row",
+    2,
+    |_evaluator, args, cursor| {
+        let parent = args[0].check_num(cursor, Some("parent rect id".into()))? as usize;
+        let constraints = constraints_from_value(&args[1], cursor)?;
+        let count = constraints.len();
+        let start = NEXT_RECT_ID.with(|n| {
+            let start = *n.borrow();
+            *n.borrow_mut() += count;
+            start
+        });
+
+        LAYOUT_CMDS.with(|cmds| {
+            cmds.borrow_mut().push(LayoutCmd {
+                parent,
+                constraints: constraints.clone(),
+                direction: Direction::Horizontal,
+                start,
+            });
+        });
+
+        let rect_ids: Vec<Value> = (start..start + count)
+            .map(|id| Value::Num(OrderedFloat(id as f64)))
+            .collect();
+        Ok(Value::List(Rc::new(RefCell::new(rect_ids))))
+    }
+);
+
+// Tui.split_col(parent_rect_id, constraints:list<num>) -> list<num rect_ids>
+native_fn!(
+    FnTuiSplitCol,
+    "tui_split_col",
+    2,
+    |_evaluator, args, cursor| {
+        let parent = args[0].check_num(cursor, Some("parent rect id".into()))? as usize;
+        let constraints = constraints_from_value(&args[1], cursor)?;
+        let count = constraints.len();
+        let start = NEXT_RECT_ID.with(|n| {
+            let start = *n.borrow();
+            *n.borrow_mut() += count;
+            start
+        });
+
+        LAYOUT_CMDS.with(|cmds| {
+            cmds.borrow_mut().push(LayoutCmd {
+                parent,
+                constraints: constraints.clone(),
+                direction: Direction::Vertical,
+                start,
+            });
+        });
+
+        let rect_ids: Vec<Value> = (start..start + count)
+            .map(|id| Value::Num(OrderedFloat(id as f64)))
+            .collect();
+        Ok(Value::List(Rc::new(RefCell::new(rect_ids))))
     }
 );
 

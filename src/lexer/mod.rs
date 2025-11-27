@@ -6,6 +6,19 @@ use std::str::FromStr;
 use crate::lexer::cursor::Cursor;
 use crate::lexer::token::{KeywordKind, Token, TokenKind};
 
+#[derive(Default, Clone)]
+pub struct LexerOutput {
+    pub tokens: Option<Vec<Token>>,
+    pub errors: Option<Vec<LexErr>>,
+    pub error_count: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct LexErr {
+    pub msg: String,
+    pub cursor: Cursor,
+}
+
 pub struct Lexer {
     /// The source code as a Vec<char>
     src: Vec<char>,
@@ -15,6 +28,8 @@ pub struct Lexer {
     start: usize,
     /// Current cursor location
     cursor: Cursor,
+    /// Output
+    out: LexerOutput,
 }
 
 impl Lexer {
@@ -24,17 +39,14 @@ impl Lexer {
             curr: 0,
             start: 0,
             cursor: Cursor::new(),
+            out: LexerOutput::default(),
         }
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> LexerOutput {
         let mut tokens: Vec<Token> = Vec::new();
 
-        loop {
-            if self.is_at_end() {
-                break;
-            }
-
+        while !self.is_at_end() {
             // Scan current char and identify token
             self.start = self.curr;
             let kind = self.scan_char();
@@ -55,7 +67,10 @@ impl Lexer {
             }
         }
         tokens.push(Token::new(TokenKind::EOF, "".into(), self.cursor.clone()));
-        tokens
+        if self.out.error_count == 0 {
+            self.out.tokens = Some(tokens);
+        }
+        self.out.clone()
     }
 
     fn scan_char(&mut self) -> Option<TokenKind> {
@@ -64,11 +79,8 @@ impl Lexer {
         let token = match c {
             // Types
             '"' => {
-                self.next();
-                let str = self.consume_until('"');
-                self.next();
-                self.next();
-                Some(TokenKind::Str(str))
+                let s = self.consume_string();
+                Some(TokenKind::Str(s))
             }
             // Assign
             '=' => {
@@ -212,29 +224,20 @@ impl Lexer {
                 if self.peek() == '\n' {
                     self.next();
                 }
-                // collapse any following \n\n...
-                while self.peek() == '\n' {
-                    self.next();
-                }
                 self.next();
                 Some(TokenKind::EOL)
             }
             '\n' => {
-                // collapse \n+
-                while self.peek() == '\n' {
-                    self.next();
-                }
                 self.next();
                 Some(TokenKind::EOL)
             }
 
             '#' => {
-                self.next();
-                let _comment = self.consume_until('\n');
-                while self.peek() == '\n' {
+                // consume comment chars, stop before newline (so it will emit EOL on next loop)
+                self.next(); // skip '#'
+                while !self.is_at_end() && self.current() != '\n' {
                     self.next();
                 }
-                self.next();
                 None
             }
             ' ' | '\t' => {
@@ -351,6 +354,10 @@ impl Lexer {
     // Iter utils
 
     fn current(&self) -> char {
+        if self.curr >= self.src.len() {
+            return ' ';
+        }
+
         self.src[self.curr]
     }
 
@@ -368,7 +375,7 @@ impl Lexer {
             return ' ';
         }
 
-        self.src[self.curr]
+        self.current()
     }
 
     fn peek(&self) -> char {
@@ -427,6 +434,60 @@ impl Lexer {
         out
     }
 
+    fn consume_string(&mut self) -> String {
+        let mut out = String::new();
+        // skip opening quote
+        self.next();
+        let mut terminated = false;
+
+        while !self.is_at_end() {
+            let ch = self.current();
+            if ch == '"' {
+                // closing quote, consume it and finish
+                self.next();
+                terminated = true;
+                break;
+            }
+
+            if ch == '\\' {
+                let esc = self.peek();
+                let mapped = match esc {
+                    '\\' => Some('\\'),
+                    '"' => Some('"'),
+                    'n' => Some('\n'),
+                    't' => Some('\t'),
+                    'r' => Some('\r'),
+                    _ => None,
+                };
+                // advance over the escape char
+                self.next();
+                if let Some(m) = mapped {
+                    self.next();
+                    out.push(m);
+                    continue;
+                } else {
+                    // unknown escape, keep the backslash literal
+                    out.push('\\');
+                    continue;
+                }
+            }
+
+            out.push(ch);
+            self.next();
+        }
+
+        if !terminated {
+            self.out.error_count += 1;
+            let err = LexErr {
+                msg: "unterminated string literal".into(),
+                cursor: self.cursor,
+            };
+            self.out.errors.get_or_insert(Vec::new()).push(err.clone());
+        }
+
+        out
+    }
+
     fn get_lexeme(&self) -> String {
         if self.is_at_end() {
             return "".into();
@@ -452,6 +513,8 @@ mod tests {
     fn tokens(src: &str) -> Vec<TokenKind> {
         let mut lx = Lexer::new(src.to_string());
         lx.tokenize()
+            .tokens
+            .unwrap_or_default()
             .iter()
             .map(|token| token.kind.clone())
             .collect()
@@ -582,6 +645,7 @@ mod tests {
                 TokenKind::LParen,
                 TokenKind::Str("x".into()),
                 TokenKind::RParen,
+                TokenKind::EOL,
                 TokenKind::EOF
             ]
         );
