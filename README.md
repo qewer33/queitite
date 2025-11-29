@@ -1,6 +1,13 @@
 ![banner](https://github.com/qewer33/queitite/blob/main/assets/readme_banner.png?raw=true)
 
-Quetite is a small interpreted scripting language with a friendly, Ruby-like syntax, dynamic typing, and a stdlib of native helpers. It is built as a classic three-stage interpreter (lexer -> parser -> evaluator) in Rust.
+Quetite is a small interpreted scripting language with a friendly, Ruby-like syntax, dynamic typing, and an stdlib of native helpers. It is implemented as a classic three-stage interpreter (lexer -> parser -> evaluator) in Rust.
+
+```rb
+println("Hello Quetite!")
+```
+
+> [!WARNING]  
+> Quetite is still a WIP (work in progress) language. Expect breaking changes!
 
 ## Features
 - [x] Easy and familiar scripting language syntax, no semicolons, no indentation rules
@@ -61,7 +68,7 @@ for n in nums do
 end
 ```
 
-## Language at a Glance
+## Quetite at a Glance
 
 - **Values & Prototypes**  
   `type()`, `type_of()`, `type_check()` on any value; conversions via `to_*()` helpers.
